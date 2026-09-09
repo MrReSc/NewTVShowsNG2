@@ -90,7 +90,7 @@ def _positive_int(name: str, default: int) -> int:
     except ValueError as exc:
         raise ValueError(f"{name} muss eine ganze Zahl sein") from exc
     if value <= 0:
-        raise ValueError(f"{name} muss größer als 0 sein")
+        raise ValueError(f"{name} muss grösser als 0 sein")
     return value
 
 
@@ -101,5 +101,5 @@ def _positive_float(name: str, default: float) -> float:
     except ValueError as exc:
         raise ValueError(f"{name} muss eine Zahl sein") from exc
     if value <= 0:
-        raise ValueError(f"{name} muss größer als 0 sein")
+        raise ValueError(f"{name} muss grösser als 0 sein")
     return value
