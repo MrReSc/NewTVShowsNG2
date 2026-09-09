@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 from datetime import UTC, datetime
+from importlib.resources import files
 from pathlib import Path
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
@@ -17,6 +18,7 @@ class Renderer:
     def __init__(self, storage: Storage, output_path: Path, timezone: str) -> None:
         self.storage = storage
         self.output_path = output_path
+        self.favicon_path = output_path.with_name("favicon.svg")
         self.timezone = ZoneInfo(timezone)
         self.environment = Environment(
             loader=PackageLoader("newtvshowsng2", "templates"),
@@ -44,18 +46,25 @@ class Renderer:
             new_count=sum(bool(row["is_new"]) for row in history),
             generated_at=datetime.now(UTC),
         )
-        self._atomic_write(html)
+        self._atomic_write(self.output_path, html)
+        favicon = (
+            files("newtvshowsng2")
+            .joinpath("static/favicon.svg")
+            .read_text(encoding="utf-8")
+        )
+        self._atomic_write(self.favicon_path, favicon)
 
-    def _atomic_write(self, content: str) -> None:
+    @staticmethod
+    def _atomic_write(path: Path, content: str) -> None:
         descriptor, temporary_path = tempfile.mkstemp(
-            prefix=".index-", suffix=".html", dir=self.output_path.parent, text=True
+            prefix=f".{path.stem}-", suffix=path.suffix, dir=path.parent, text=True
         )
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8") as output:
                 output.write(content)
                 output.flush()
                 os.fsync(output.fileno())
-            os.replace(temporary_path, self.output_path)
+            os.replace(temporary_path, path)
         except BaseException:
             try:
                 os.unlink(temporary_path)

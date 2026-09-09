@@ -138,6 +138,8 @@ def test_html_is_escaped_and_has_no_quality_ui(tmp_path) -> None:
     assert "Historie" in html
     assert '<html lang="de-CH">' in html
     assert 'rel="icon"' in html
-    assert "data:image/svg+xml," in html
+    assert 'href="favicon.svg"' in html
+    favicon = cfg.output_path.with_name("favicon.svg").read_text(encoding="utf-8")
+    assert favicon.startswith("<svg ")
     assert "Qualität" not in html
     assert 'id="myInput"' not in html
