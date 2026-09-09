@@ -10,7 +10,6 @@ services:
     pull_policy: always
     container_name: NewTVShowsNG2
     restart: unless-stopped
-    user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       - "28800:8080"
     environment:
@@ -21,6 +20,8 @@ services:
       MAX_HISTORY: ${MAX_HISTORY:-300}
       TZ: ${TZ:-Europe/Zurich}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
     volumes:
       - ./data:/data
       - ./out:/out

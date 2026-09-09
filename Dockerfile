@@ -16,12 +16,10 @@ RUN python -m pip install --no-cache-dir . \
     && mkdir -p /data /out \
     && chown -R newtvshows:newtvshows /data /out
 
-USER 10001:10001
-
 VOLUME ["/data", "/out"]
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.getenv('PORT', '8080')}/healthz\", timeout=3)"]
 
-ENTRYPOINT ["newtvshowsng2"]
+ENTRYPOINT ["python", "-m", "newtvshowsng2.entrypoint"]
