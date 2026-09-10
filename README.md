@@ -40,9 +40,3 @@ LOG_LEVEL=INFO
 PUID=1000
 PGID=1000
 ```
-
-```bash
-mkdir -p data out
-docker compose pull
-docker compose up -d
-```

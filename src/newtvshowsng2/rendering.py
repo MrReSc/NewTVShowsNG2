@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
-from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
+from .logging_utils import LOG_PAGE_LINES, read_recent_log_lines
 from .storage import Storage
 
 
@@ -25,25 +24,17 @@ class Renderer:
             autoescape=select_autoescape(("html", "xml")),
         )
         self.environment.filters["local_datetime"] = self._local_datetime
-        self.environment.filters["source_name"] = _source_name
 
     def render(self) -> None:
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         current = self.storage.announcements(current_only=True)
         history = self.storage.announcements()
         state = self.storage.state()
-        try:
-            feed_errors = json.loads(state.get("feed_errors", "[]"))
-        except json.JSONDecodeError:
-            feed_errors = []
 
         html = self.environment.get_template("index.html").render(
             current=current,
             history=history,
             state=state,
-            feed_errors=feed_errors,
-            current_count=len(current),
-            new_count=sum(bool(row["is_new"]) for row in history),
             generated_at=datetime.now(UTC),
         )
         self._atomic_write(self.output_path, html)
@@ -86,8 +77,22 @@ class Renderer:
             return str(value)
 
 
-def _source_name(value: str) -> str:
-    try:
-        return urlsplit(value).netloc or "Quelle"
-    except ValueError:
-        return "Quelle"
+class LogRenderer:
+    def __init__(self, log_path: Path, timezone: str) -> None:
+        self.log_path = log_path
+        self.timezone = ZoneInfo(timezone)
+        self.environment = Environment(
+            loader=PackageLoader("newtvshowsng2", "templates"),
+            autoescape=select_autoescape(("html", "xml")),
+        )
+
+    def render(self) -> str:
+        lines = read_recent_log_lines(self.log_path)
+        return self.environment.get_template("log.html").render(
+            log_text="\n".join(lines),
+            line_count=len(lines),
+            line_limit=LOG_PAGE_LINES,
+            generated_at=datetime.now(UTC)
+            .astimezone(self.timezone)
+            .strftime("%d.%m.%Y, %H:%M:%S"),
+        )

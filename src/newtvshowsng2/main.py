@@ -5,6 +5,7 @@ import signal
 import threading
 
 from .config import Config
+from .logging_utils import configure_logging
 from .rendering import Renderer
 from .scanner import Scanner
 from .server import ApplicationServer
@@ -19,12 +20,9 @@ def main() -> None:
     except ValueError as exc:
         raise SystemExit(f"Konfigurationsfehler: {exc}") from exc
 
-    logging.basicConfig(
-        level=getattr(logging, config.log_level),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
     config.data_dir.mkdir(parents=True, exist_ok=True)
     config.output_dir.mkdir(parents=True, exist_ok=True)
+    configure_logging(config.log_path, config.log_level)
 
     storage = Storage(config.database_path)
     storage.initialize()
@@ -44,7 +42,13 @@ def main() -> None:
     scheduler_thread = threading.Thread(target=scheduler, name="scanner", daemon=True)
     scheduler_thread.start()
 
-    server = ApplicationServer(("0.0.0.0", config.port), config.output_path, storage)
+    server = ApplicationServer(
+        ("0.0.0.0", config.port),
+        config.output_path,
+        storage,
+        config.log_path,
+        config.timezone,
+    )
 
     def stop(_signum: int, _frame: object) -> None:
         LOGGER.info("Beende NewTVShowsNG2")

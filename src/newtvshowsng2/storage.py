@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS announcements (
     match_method TEXT NOT NULL,
     match_warning INTEGER NOT NULL DEFAULT 0,
     jellyfin_episode INTEGER,
+    jellyfin_episode_count INTEGER,
+    jellyfin_expected_episode_count INTEGER,
     is_current INTEGER NOT NULL DEFAULT 1,
     is_new INTEGER NOT NULL DEFAULT 1
 );
@@ -51,6 +53,15 @@ class Storage:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.executescript(SCHEMA)
+            self._ensure_column(
+                connection, "announcements", "jellyfin_episode_count", "INTEGER"
+            )
+            self._ensure_column(
+                connection,
+                "announcements",
+                "jellyfin_expected_episode_count",
+                "INTEGER",
+            )
 
     def begin_scan(self, started_at: datetime, next_run_at: datetime) -> None:
         with self._connect() as connection:
@@ -106,11 +117,8 @@ class Storage:
         content_hash = hashlib.sha256(
             f"{feed.title}\0{feed.link}\0{feed.published_at.isoformat()}\0{feed.content}".encode()
         ).hexdigest()
-        local_episode = library.episode_in_season(match.series.id, parsed.season)
-        is_current = (
-            not library.episode_exists(match.series.id, parsed.season, parsed.episode)
-            if parsed.episode is not None
-            else library.season_is_current(match.series.id, parsed.season)
+        local_episode, available_count, expected_count, is_current = _library_state(
+            library, match.series.id, parsed.season, parsed.episode
         )
 
         with self._connect() as connection:
@@ -126,8 +134,9 @@ class Storage:
                     first_seen_at, last_seen_at, content_hash, parsed_title,
                     season, episode, imdb_id, matched_series_id,
                     matched_series_name, match_method, match_warning,
-                    jellyfin_episode, is_current, is_new
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    jellyfin_episode, jellyfin_episode_count,
+                    jellyfin_expected_episode_count, is_current, is_new
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(source_key) DO UPDATE SET
                     guid = excluded.guid,
                     link = excluded.link,
@@ -144,6 +153,9 @@ class Storage:
                     match_method = excluded.match_method,
                     match_warning = excluded.match_warning,
                     jellyfin_episode = excluded.jellyfin_episode,
+                    jellyfin_episode_count = excluded.jellyfin_episode_count,
+                    jellyfin_expected_episode_count =
+                        excluded.jellyfin_expected_episode_count,
                     is_current = excluded.is_current,
                     is_new = excluded.is_new
                 """,
@@ -166,6 +178,8 @@ class Storage:
                     match.method,
                     int(match.warning),
                     local_episode,
+                    available_count,
+                    expected_count,
                     int(is_current),
                     int(is_new),
                 ),
@@ -174,7 +188,10 @@ class Storage:
     def refresh_library_state(self, library: Library) -> None:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT source_key, matched_series_id, season, episode FROM announcements"
+                """
+                SELECT source_key, matched_series_id, season, episode
+                FROM announcements
+                """
             ).fetchall()
             valid_ids = {series.id for series in library.series}
             for row in rows:
@@ -182,23 +199,41 @@ class Storage:
                 season = row["season"]
                 episode = row["episode"]
                 if series_id not in valid_ids:
-                    is_current = False
                     local_episode = None
+                    available_count = 0
+                    expected_count = None
+                    is_current = False
                 else:
-                    local_episode = library.episode_in_season(series_id, season)
-                    is_current = (
-                        not library.episode_exists(series_id, season, episode)
-                        if episode is not None
-                        else library.season_is_current(series_id, season)
-                    )
+                    (
+                        local_episode,
+                        available_count,
+                        expected_count,
+                        is_current,
+                    ) = _library_state(library, series_id, season, episode)
                 connection.execute(
                     """
                     UPDATE announcements
-                    SET jellyfin_episode = ?, is_current = ?
+                    SET jellyfin_episode = ?, jellyfin_episode_count = ?,
+                        jellyfin_expected_episode_count = ?, is_current = ?
                     WHERE source_key = ?
                     """,
-                    (local_episode, int(is_current), row["source_key"]),
+                    (
+                        local_episode,
+                        available_count,
+                        expected_count,
+                        int(is_current),
+                        row["source_key"],
+                    ),
                 )
+
+    def tracked_seasons(self) -> set[tuple[str, int]]:
+        with self._connect() as connection:
+            return {
+                (str(row["matched_series_id"]), int(row["season"]))
+                for row in connection.execute(
+                    "SELECT DISTINCT matched_series_id, season FROM announcements"
+                )
+            }
 
     def prune(self, max_history: int) -> None:
         with self._connect() as connection:
@@ -256,6 +291,17 @@ class Storage:
             values.items(),
         )
 
+    @staticmethod
+    def _ensure_column(
+        connection: sqlite3.Connection, table: str, column: str, definition: str
+    ) -> None:
+        columns = {
+            row["name"]
+            for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if column not in columns:
+            connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
 
 def _source_key(feed: FeedRelease) -> str:
     identity = feed.guid or feed.link
@@ -266,3 +312,16 @@ def _iso(value: datetime) -> str:
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return value.astimezone(UTC).isoformat()
+
+
+def _library_state(
+    library: Library, series_id: str, season: int, episode: int | None
+) -> tuple[int | None, int, int | None, bool]:
+    highest_episode = library.episode_in_season(series_id, season)
+    available_count, expected_count = library.season_counts(series_id, season)
+    if episode is not None:
+        is_current = not library.episode_exists(series_id, season, episode)
+    else:
+        complete = library.season_is_complete(series_id, season)
+        is_current = complete is not True
+    return highest_episode, available_count, expected_count, is_current

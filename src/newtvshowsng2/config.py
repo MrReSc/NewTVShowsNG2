@@ -30,6 +30,10 @@ class Config:
         return self.output_dir / "index.html"
 
     @property
+    def log_path(self) -> Path:
+        return self.data_dir / "newtvshowsng2.log"
+
+    @property
     def interval_seconds(self) -> float:
         return self.check_interval_hours * 3600
 

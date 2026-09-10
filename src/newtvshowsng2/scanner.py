@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from .config import Config
 from .feeds import FeedClient, FeedError
-from .jellyfin import JellyfinClient
+from .jellyfin import JellyfinClient, JellyfinError
 from .matching import match_release
 from .parsing import parse_release
 from .rendering import Renderer
@@ -43,6 +43,56 @@ class Scanner:
         self.storage.begin_scan(started_at, planned_next)
         try:
             library = self.jellyfin.load_library()
+            scan_warnings: list[str] = []
+            season_cache: set[tuple[str, int]] = set()
+            missing_metadata_warning_logged = False
+
+            def load_season(series_id: str, season: int) -> None:
+                nonlocal missing_metadata_warning_logged
+                key = (series_id, season)
+                if key in season_cache:
+                    return
+                season_cache.add(key)
+
+                if not library.missing_episode_tracking_enabled:
+                    if not missing_metadata_warning_logged:
+                        message = (
+                            "Jellyfin importiert keine fehlenden Episoden; "
+                            "Sollzahlen von Staffeln bleiben unbekannt"
+                        )
+                        scan_warnings.append(message)
+                        LOGGER.warning("%s", message)
+                        missing_metadata_warning_logged = True
+                    return
+
+                local_episodes = library.episode_numbers(series_id, season)
+                try:
+                    expected_episodes = self.jellyfin.load_season_episodes(
+                        series_id, season
+                    )
+                except JellyfinError as exc:
+                    message = (
+                        f"Jellyfin-Sollzahl für {series_id} S{season:02d} "
+                        f"konnte nicht geladen werden: {exc}"
+                    )
+                    scan_warnings.append(message)
+                    LOGGER.warning("%s", message)
+                    return
+
+                if not local_episodes.issubset(expected_episodes):
+                    message = (
+                        f"Jellyfin lieferte widersprüchliche Episodendaten für "
+                        f"{series_id} S{season:02d}; Sollzahl bleibt unbekannt"
+                    )
+                    scan_warnings.append(message)
+                    LOGGER.warning("%s", message)
+                    return
+                library.set_expected_episodes(series_id, season, expected_episodes)
+
+            valid_series_ids = {series.id for series in library.series}
+            for series_id, season in self.storage.tracked_seasons():
+                if series_id in valid_series_ids:
+                    load_season(series_id, season)
             self.storage.refresh_library_state(library)
             feed_errors: list[str] = []
             successful_feeds = 0
@@ -77,6 +127,7 @@ class Scanner:
                             match.series.name,
                             match.method,
                         )
+                    load_season(match.series.id, parsed.season)
                     self.storage.upsert_release(
                         feed_release, parsed, match, library, started_at
                     )
@@ -87,7 +138,9 @@ class Scanner:
             self.storage.prune(self.config.max_history)
             completed_at = datetime.now(UTC)
             next_run = completed_at + timedelta(seconds=self.config.interval_seconds)
-            self.storage.complete_scan(completed_at, next_run, feed_errors)
+            self.storage.complete_scan(
+                completed_at, next_run, [*feed_errors, *scan_warnings]
+            )
             self.renderer.render()
             LOGGER.info(
                 "Scan abgeschlossen%s",

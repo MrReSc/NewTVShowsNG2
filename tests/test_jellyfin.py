@@ -26,6 +26,42 @@ class Session:
         self.calls.append((url, params, timeout))
         if url.endswith("/System/Info/Public"):
             return Response({"Version": self.version})
+        if url.endswith("/Library/VirtualFolders"):
+            return Response(
+                [
+                    {
+                        "CollectionType": "tvshows",
+                        "LibraryOptions": {
+                            "TypeOptions": [
+                                {
+                                    "Type": "Series",
+                                    "MetadataFetchers": ["Missing Episode Fetcher"],
+                                }
+                            ]
+                        },
+                    }
+                ]
+            )
+        if "/Shows/" in url and url.endswith("/Episodes"):
+            return Response(
+                {
+                    "Items": [
+                        {
+                            "ParentIndexNumber": 3,
+                            "IndexNumber": 1,
+                            "IndexNumberEnd": 2,
+                            "LocationType": "FileSystem",
+                        },
+                        {
+                            "ParentIndexNumber": 3,
+                            "IndexNumber": 3,
+                            "LocationType": "Virtual",
+                            "PremiereDate": "2099-01-01T00:00:00Z",
+                        },
+                    ],
+                    "TotalRecordCount": 2,
+                }
+            )
         if params["includeItemTypes"] == "Series":
             return Response(
                 {
@@ -48,6 +84,7 @@ class Session:
                         "SeriesId": "series-1",
                         "ParentIndexNumber": 3,
                         "IndexNumber": 6,
+                        "IndexNumberEnd": 7,
                     }
                 ],
                 "TotalRecordCount": 1,
@@ -62,14 +99,49 @@ def test_loads_jellyfin_12_with_modern_authorization() -> None:
     library = client.load_library()
 
     assert library.series[0].imdb_id == "tt18546730"
-    assert library.episode_in_season("series-1", 3) == 6
+    assert library.episode_in_season("series-1", 3) == 7
+    assert library.missing_episode_tracking_enabled
     assert session.headers["Authorization"].startswith("MediaBrowser ")
     assert 'Token="secret"' in session.headers["Authorization"]
     assert all("api_key" not in (params or {}) for _, params, _ in session.calls)
     assert any(url.endswith("/Items") for url, _, _ in session.calls)
-    episode_params = session.calls[-1][1]
+    episode_params = next(
+        params
+        for url, params, _ in session.calls
+        if url.endswith("/Items") and params["includeItemTypes"] == "Episode"
+    )
     assert episode_params["isMissing"] == "false"
     assert episode_params["locationTypes"] == "FileSystem"
+
+
+def test_loads_complete_season_inventory_and_combined_episodes() -> None:
+    client = JellyfinClient("http://jellyfin.test", "secret", session=Session())
+
+    assert client.load_season_episodes("series-1", 3) == {1, 2, 3}
+
+
+def test_missing_episode_tracking_must_be_enabled() -> None:
+    session = Session()
+    original_get = session.get
+
+    def get(url, params=None, timeout=None):
+        if url.endswith("/Library/VirtualFolders"):
+            return Response(
+                [
+                    {
+                        "CollectionType": "tvshows",
+                        "LibraryOptions": {"TypeOptions": []},
+                    }
+                ]
+            )
+        return original_get(url, params, timeout)
+
+    session.get = get
+    library = JellyfinClient(
+        "http://jellyfin.test", "secret", session=session
+    ).load_library()
+
+    assert not library.missing_episode_tracking_enabled
 
 
 def test_rejects_non_v12_server() -> None:
