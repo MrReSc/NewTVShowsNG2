@@ -114,6 +114,12 @@ class JellyfinClient:
             if not isinstance(item, dict):
                 continue
             item_season = _as_int(_field(item, "ParentIndexNumber"))
+            if item_season == 0 and season != 0:
+                LOGGER.debug(
+                    "Jellyfin-Special aus Staffel 0 bei Abfrage von S%02d ignoriert",
+                    season,
+                )
+                continue
             if item_season is not None and item_season != season:
                 raise JellyfinError(
                     "Jellyfin lieferte eine Episode aus Staffel "

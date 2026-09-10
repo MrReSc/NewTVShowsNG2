@@ -120,6 +120,47 @@ def test_loads_complete_season_inventory_and_combined_episodes() -> None:
     assert client.load_season_episodes("series-1", 3) == {1, 2, 3}
 
 
+def test_ignores_specials_displayed_with_regular_season() -> None:
+    session = Session()
+    original_get = session.get
+
+    def get(url, params=None, timeout=None):
+        if "/Shows/" in url and url.endswith("/Episodes"):
+            return Response(
+                {
+                    "Items": [
+                        {"ParentIndexNumber": 3, "IndexNumber": 1},
+                        {"ParentIndexNumber": 3, "IndexNumber": 2},
+                        {"ParentIndexNumber": 0, "IndexNumber": 7},
+                    ]
+                }
+            )
+        return original_get(url, params, timeout)
+
+    session.get = get
+    client = JellyfinClient("http://jellyfin.test", "secret", session=session)
+
+    assert client.load_season_episodes("series-1", 3) == {1, 2}
+
+
+def test_rejects_episode_from_another_regular_season() -> None:
+    session = Session()
+    original_get = session.get
+
+    def get(url, params=None, timeout=None):
+        if "/Shows/" in url and url.endswith("/Episodes"):
+            return Response(
+                {"Items": [{"ParentIndexNumber": 2, "IndexNumber": 1}]}
+            )
+        return original_get(url, params, timeout)
+
+    session.get = get
+    client = JellyfinClient("http://jellyfin.test", "secret", session=session)
+
+    with pytest.raises(JellyfinError, match="Episode aus Staffel 2"):
+        client.load_season_episodes("series-1", 3)
+
+
 def test_missing_episode_tracking_must_be_enabled() -> None:
     session = Session()
     original_get = session.get
