@@ -1,16 +1,42 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
+from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from .logging_utils import LOG_PAGE_LINES, read_recent_log_lines
 from .storage import Storage
+
+QUALITY_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9])(2160[pi]|1080[pi]|720[pi]|576[pi]|480[pi]|4k|uhd)"
+    r"(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+RELEASE_GROUP_PATTERN = re.compile(
+    r"-\s*(?P<group>[A-Za-z0-9][A-Za-z0-9._]{0,31})\s*$"
+)
+QUALITY_DETAILS = {
+    "480p": (480, "480p"),
+    "480i": (480, "480i"),
+    "576p": (576, "576p"),
+    "576i": (576, "576i"),
+    "720p": (720, "720p"),
+    "720i": (720, "720i"),
+    "1080p": (1080, "1080p"),
+    "1080i": (1080, "1080i"),
+    "2160p": (2160, "2160p"),
+    "2160i": (2160, "2160i"),
+    "4k": (2160, "4K"),
+    "uhd": (2160, "UHD"),
+}
 
 
 class Renderer:
@@ -27,7 +53,9 @@ class Renderer:
 
     def render(self) -> None:
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
-        current = self.storage.announcements(current_only=True)
+        current = group_current_releases(
+            self.storage.announcements(current_only=True)
+        )
         history = self.storage.announcements()
         state = self.storage.state()
 
@@ -75,6 +103,104 @@ class Renderer:
             return parsed.astimezone(self.timezone).strftime("%d.%m.%Y, %H:%M")
         except (TypeError, ValueError):
             return str(value)
+
+
+def group_current_releases(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    buckets: dict[tuple[str, str, int, int | None], list[dict[str, Any]]] = {}
+    for row in rows:
+        key = (
+            str(row["feed_url"]),
+            str(row["matched_series_id"]),
+            int(row["season"]),
+            int(row["episode"]) if row["episode"] is not None else None,
+        )
+        buckets.setdefault(key, []).append(row)
+
+    groups = [_build_release_group(group_rows) for group_rows in buckets.values()]
+    return sorted(groups, key=_row_order, reverse=True)
+
+
+def _build_release_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    newest = max(rows, key=_row_order)
+    group = dict(newest)
+    marker = f"S{int(newest['season']):02d}"
+    if newest["episode"] is not None:
+        marker += f"E{int(newest['episode']):02d}"
+    base_title = newest.get("parsed_title") or newest["matched_series_name"]
+    group["display_title"] = f"{base_title} · {marker}"
+    group["is_new"] = any(bool(row["is_new"]) for row in rows)
+    group["match_warning"] = any(bool(row["match_warning"]) for row in rows)
+    group["variants"] = _release_variants(rows)
+    return group
+
+
+def _release_variants(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    variants = []
+    for row in rows:
+        quality_rank, quality_label = _quality(str(row["title"]))
+        variants.append(
+            {
+                "link": row["link"],
+                "title": row["title"],
+                "quality_rank": quality_rank,
+                "base_label": quality_label,
+                "release_group": _release_group(str(row["title"])),
+                "published_at": row["published_at"],
+            }
+        )
+
+    variants.sort(
+        key=lambda item: (
+            item["quality_rank"],
+            item["base_label"].casefold(),
+            item["published_at"],
+            item["title"].casefold(),
+        )
+    )
+    base_counts = Counter(item["base_label"] for item in variants)
+    candidate_counts: Counter[str] = Counter()
+    for item in variants:
+        base_label = item["base_label"]
+        if base_counts[base_label] == 1:
+            candidate = base_label
+        elif base_label == "Quelle":
+            candidate = base_label
+        elif item["release_group"]:
+            candidate = f"{base_label} · {item['release_group']}"
+        else:
+            candidate = base_label
+        item["candidate_label"] = candidate
+        candidate_counts[candidate] += 1
+
+    candidate_indexes: defaultdict[str, int] = defaultdict(int)
+    source_index = 0
+    for item in variants:
+        candidate = item.pop("candidate_label")
+        if item["base_label"] == "Quelle" and base_counts["Quelle"] > 1:
+            source_index += 1
+            item["label"] = f"Quelle {source_index}"
+        elif candidate_counts[candidate] > 1:
+            candidate_indexes[candidate] += 1
+            item["label"] = f"{candidate} {candidate_indexes[candidate]}"
+        else:
+            item["label"] = candidate
+    return variants
+
+
+def _quality(title: str) -> tuple[int, str]:
+    match = QUALITY_PATTERN.search(title)
+    if match is None:
+        return 10_000, "Quelle"
+    return QUALITY_DETAILS[match.group(1).casefold()]
+
+
+def _release_group(title: str) -> str | None:
+    match = RELEASE_GROUP_PATTERN.search(title)
+    return match.group("group") if match else None
+
+
+def _row_order(row: dict[str, Any]) -> tuple[str, str]:
+    return str(row["published_at"]), str(row.get("first_seen_at", ""))
 
 
 class LogRenderer:

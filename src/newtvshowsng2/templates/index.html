@@ -93,6 +93,10 @@
     .release { width: 39%; overflow-wrap: anywhere; font-size: .9rem; font-weight: 650; }
     .release a { color: var(--text); text-decoration-color: #53617a; }
     .release a:visited { color: var(--visited); text-decoration-color: #a66fd1; }
+    .release-title { display: block; }
+    .variant-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+    .variant-links a { padding: 2px 7px; border: 1px solid #53617a; border-radius: 999px; font-size: .74rem; font-weight: 750; text-decoration: none; }
+    .variant-links a:visited { border-color: #a66fd1; }
     .release-meta { display: block; margin-top: 4px; color: var(--muted); font-size: .76rem; font-weight: 650; }
     .series { width: 20%; overflow-wrap: anywhere; }
     .inventory { width: 14%; white-space: nowrap; }
@@ -185,8 +189,17 @@
               {% for row in rows %}
                 <tr>
                   <td class="release" data-label="Release">
-                    <a href="{{ row.link }}" target="_blank" rel="noopener noreferrer">{{ row.title }}</a>
-                    <span class="release-meta">S{{ "%02d" | format(row.season) }}{% if row.episode is not none %}E{{ "%02d" | format(row.episode) }}{% endif %}</span>
+                    {% if current_panel %}
+                      <span class="release-title">{{ row.display_title }}</span>
+                      <span class="variant-links">
+                        {% for variant in row.variants %}
+                          <a href="{{ variant.link }}" title="{{ variant.title }}" target="_blank" rel="noopener noreferrer">{{ variant.label }}</a>
+                        {% endfor %}
+                      </span>
+                    {% else %}
+                      <a href="{{ row.link }}" target="_blank" rel="noopener noreferrer">{{ row.title }}</a>
+                      <span class="release-meta">S{{ "%02d" | format(row.season) }}{% if row.episode is not none %}E{{ "%02d" | format(row.episode) }}{% endif %}</span>
+                    {% endif %}
                   </td>
                   <td class="series" data-label="Jellyfin-Serie">{{ row.matched_series_name }}</td>
                   <td class="inventory" data-label="Bestand">

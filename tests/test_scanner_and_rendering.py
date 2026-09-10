@@ -5,7 +5,7 @@ from pathlib import Path
 from newtvshowsng2.config import Config
 from newtvshowsng2.jellyfin import JellyfinError
 from newtvshowsng2.models import FeedRelease, Library, Series
-from newtvshowsng2.rendering import Renderer
+from newtvshowsng2.rendering import Renderer, group_current_releases
 from newtvshowsng2.scanner import Scanner
 from newtvshowsng2.storage import Storage
 
@@ -175,26 +175,121 @@ def test_contradictory_season_inventory_stays_unknown(tmp_path) -> None:
     assert "widersprüchliche Episodendaten" in storage.state()["feed_errors"]
 
 
-def test_release_variants_remain_separate(tmp_path) -> None:
+def test_release_variants_stay_stored_but_are_grouped_in_current_view(tmp_path) -> None:
     cfg, storage, renderer = setup(tmp_path)
     series = Series("dead-city", "The Walking Dead: Dead City", imdb_id="tt18546730")
     library = Library([series], missing_episode_tracking_enabled=True)
     jellyfin = Jellyfin(library, {(series.id, 3): set(range(1, 11))})
-    first = release("The.Walking.Dead.Dead.City.S03.German.720p")
+    first = release("The.Walking.Dead.Dead.City.S03.German.720p-WAYNE")
     second = replace(
         first,
         guid="post-2",
         link="https://feed.test/post-2",
-        title="The.Walking.Dead.Dead.City.S03.German.1080p",
+        title="The.Walking.Dead.Dead.City.S03.German.1080p-WvF",
+        published_at=datetime(2026, 9, 9, 18, 0, tzinfo=UTC),
     )
     scanner = Scanner(cfg, storage, renderer, jellyfin, Feeds([first, second]))
 
     assert scanner.run()
     assert len(storage.announcements()) == 2
     assert jellyfin.season_calls == [(series.id, 3)]
+    html = cfg.output_path.read_text(encoding="utf-8")
+    current_html, history_html = html.split('<details class="history">', 1)
+    assert current_html.count('data-label="Release"') == 1
+    assert "1 Einträge" in current_html
+    assert "The.Walking.Dead.Dead.City · S03" in current_html
+    assert '>720p</a>' in current_html
+    assert '>1080p</a>' in current_html
+    assert 'href="https://feed.test/post-1"' in current_html
+    assert 'href="https://feed.test/post-2"' in current_html
+    assert current_html.index(">720p</a>") < current_html.index(">1080p</a>")
+    assert history_html.count('data-label="Release"') == 2
+    assert "2 Einträge" in history_html
 
 
-def test_html_is_escaped_and_has_no_quality_ui(tmp_path) -> None:
+def test_current_grouping_key_and_aggregated_fields() -> None:
+    def row(
+        source_key,
+        *,
+        feed_url="https://feed.test/rss",
+        series_id="show",
+        season=3,
+        episode=None,
+        title="Show.S03.1080p-WAYNE",
+        published_at="2026-09-08T18:00:00+00:00",
+        is_new=0,
+        match_warning=0,
+    ):
+        return {
+            "source_key": source_key,
+            "feed_url": feed_url,
+            "matched_series_id": series_id,
+            "matched_series_name": "Show",
+            "season": season,
+            "episode": episode,
+            "title": title,
+            "link": f"https://feed.test/{source_key}",
+            "parsed_title": "Show",
+            "published_at": published_at,
+            "first_seen_at": published_at,
+            "is_new": is_new,
+            "is_current": 1,
+            "match_warning": match_warning,
+        }
+
+    groups = group_current_releases(
+        [
+            row("old", is_new=1),
+            row(
+                "new",
+                title="Show.S03.1080p-WvF",
+                published_at="2026-09-09T18:00:00+00:00",
+                match_warning=1,
+            ),
+            row("other-feed", feed_url="https://other.test/rss"),
+            row("other-season", season=4),
+            row("episode", episode=1),
+        ]
+    )
+
+    assert len(groups) == 4
+    grouped = next(group for group in groups if len(group["variants"]) == 2)
+    assert grouped["published_at"] == "2026-09-09T18:00:00+00:00"
+    assert grouped["is_new"]
+    assert grouped["match_warning"]
+    assert [variant["label"] for variant in grouped["variants"]] == [
+        "1080p · WAYNE",
+        "1080p · WvF",
+    ]
+
+
+def test_unknown_quality_links_are_numbered() -> None:
+    rows = []
+    for number in (1, 2):
+        rows.append(
+            {
+                "feed_url": "https://feed.test/rss",
+                "matched_series_id": "show",
+                "matched_series_name": "Show",
+                "season": 3,
+                "episode": None,
+                "title": f"Show.S03.Source-{number}",
+                "link": f"https://feed.test/{number}",
+                "parsed_title": "Show",
+                "published_at": f"2026-09-0{number}T18:00:00+00:00",
+                "first_seen_at": f"2026-09-0{number}T18:00:00+00:00",
+                "is_new": 0,
+                "is_current": 1,
+                "match_warning": 0,
+            }
+        )
+
+    variants = group_current_releases(rows)[0]["variants"]
+
+    assert [variant["label"] for variant in variants] == ["Quelle 1", "Quelle 2"]
+
+
+def test_html_is_escaped_and_keeps_reduced_columns(tmp_path) -> None:
     cfg, storage, renderer = setup(tmp_path)
     series = Series("show", "Show", imdb_id="tt1234567")
     library = Library([series], missing_episode_tracking_enabled=True)
@@ -232,7 +327,7 @@ def test_html_is_escaped_and_has_no_quality_ui(tmp_path) -> None:
     assert "Jellyfin Release Monitor" not in html
     assert "Neu im letzten Scan" not in html
     assert "Letzter Erfolg" not in html
-    assert "Quelle" not in html
+    assert ">Quelle</a>" in html
     assert "IMDb-ID" not in html
     assert "a:visited" in html
     assert html.count("<th ") == 10
