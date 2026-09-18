@@ -6,7 +6,7 @@ from typing import Any
 import requests
 
 from . import __version__
-from .models import Library, Series
+from .models import Library, SeasonInventory, Series
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,11 +20,14 @@ class JellyfinClient:
         self,
         base_url: str,
         api_key: str,
+        username: str,
         timeout: float = 20.0,
         session: requests.Session | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.username = username.strip()
+        self.user_id: str | None = None
         self.session = session or requests.Session()
         self.session.headers.update(
             {
@@ -38,11 +41,14 @@ class JellyfinClient:
         )
 
     def load_library(self) -> Library:
+        self.user_id = None
         version = self._server_version()
         if version.split(".", 1)[0] != "12":
             raise JellyfinError(
                 f"Nicht unterstützte Jellyfin-Version {version!r}; benötigt wird 12.x"
             )
+
+        self.user_id = self._resolve_user()
 
         series_items = self._get_all_items(
             {
@@ -94,40 +100,52 @@ class JellyfinClient:
         )
         return library
 
-    def load_season_episodes(self, series_id: str, season: int) -> set[int]:
-        payload = self._get_json(
-            f"/Shows/{series_id}/Episodes",
-            {
-                "season": str(season),
-                "enableImages": "false",
-                "enableUserData": "false",
-            },
-        )
-        items = _field(payload, "Items")
-        if not isinstance(items, list):
+    def _resolve_user(self) -> str:
+        if not self.username:
+            raise JellyfinError("JELLYFIN_USERNAME muss gesetzt sein")
+        users = self._get_payload("/Users")
+        if not isinstance(users, list):
+            raise JellyfinError("Jellyfin /Users lieferte keine gültige Benutzerliste")
+        matches = [
+            user
+            for user in users
+            if isinstance(user, dict)
+            and str(_field(user, "Name") or "").casefold() == self.username.casefold()
+        ]
+        if len(matches) != 1:
             raise JellyfinError(
-                "Jellyfin Staffelabfrage enthält keine gültige Item-Liste"
+                f"Jellyfin-Benutzer {self.username!r} wurde nicht eindeutig gefunden"
             )
+        user = matches[0]
+        policy = _field(user, "Policy")
+        if isinstance(policy, dict) and _field(policy, "IsDisabled") is True:
+            raise JellyfinError(f"Jellyfin-Benutzer {self.username!r} ist deaktiviert")
+        user_id = _field(user, "Id")
+        if not user_id:
+            raise JellyfinError("Jellyfin-Benutzer besitzt keine gültige ID")
+        return str(user_id)
 
-        episodes: set[int] = set()
+    def load_series_episodes(self, series_id: str) -> dict[int, SeasonInventory]:
+        if self.user_id is None:
+            raise JellyfinError("Jellyfin-Benutzer wurde noch nicht aufgelöst")
+        # A season-number lookup can hide virtual seasons for users who have
+        # DisplayMissingEpisodes disabled. Read the whole series and group locally.
+        items = self._get_all_items(
+            {
+                "userId": self.user_id,
+                "enableImages": "false",
+                "enableUserData": "true",
+            },
+            path=f"/Shows/{series_id}/Episodes",
+        )
+        seasons: dict[int, SeasonInventory] = {}
         for item in items:
-            if not isinstance(item, dict):
-                continue
             item_season = _as_int(_field(item, "ParentIndexNumber"))
-            if item_season == 0 and season != 0:
-                LOGGER.debug(
-                    "Jellyfin-Special aus Staffel 0 bei Abfrage von S%02d ignoriert",
-                    season,
-                )
-                continue
-            if item_season is not None and item_season != season:
-                raise JellyfinError(
-                    "Jellyfin lieferte eine Episode aus Staffel "
-                    f"{item_season} für S{season:02d}"
-                )
             first = _as_int(_field(item, "IndexNumber"))
-            if first is None or first < 0:
-                continue
+            if item_season is None or item_season < 0 or first is None or first < 0:
+                raise JellyfinError(
+                    "Jellyfin lieferte eine Episode ohne gültige Nummern"
+                )
             last = _as_int(_field(item, "IndexNumberEnd"))
             if last is None:
                 last = first
@@ -135,8 +153,18 @@ class JellyfinClient:
                 raise JellyfinError(
                     f"Jellyfin lieferte einen ungültigen Episodenbereich {first}-{last}"
                 )
-            episodes.update(range(first, last + 1))
-        return episodes
+            inventory = seasons.setdefault(item_season, SeasonInventory())
+            numbers = set(range(first, last + 1))
+            inventory.episodes.update(numbers)
+            user_data = _field(item, "UserData")
+            played = (
+                _field(user_data, "Played") if isinstance(user_data, dict) else None
+            )
+            if played is True:
+                inventory.played.update(numbers)
+            elif played is not False:
+                inventory.played_status_complete = False
+        return seasons
 
     def _missing_episode_tracking_enabled(self) -> bool:
         try:
@@ -171,7 +199,9 @@ class JellyfinClient:
             raise JellyfinError("Jellyfin meldet keine Serverversion")
         return str(version)
 
-    def _get_all_items(self, params: dict[str, str]) -> list[dict[str, Any]]:
+    def _get_all_items(
+        self, params: dict[str, str], *, path: str = "/Items"
+    ) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = []
         start_index = 0
         page_size = 500
@@ -182,17 +212,21 @@ class JellyfinClient:
                 "limit": str(page_size),
                 "enableTotalRecordCount": "true",
             }
-            payload = self._get_json("/Items", page_params)
-            items = _field(payload, "Items") or []
-            if not isinstance(items, list):
-                raise JellyfinError("Jellyfin /Items enthält keine gültige Item-Liste")
-            result.extend(item for item in items if isinstance(item, dict))
+            payload = self._get_json(path, page_params)
+            items = _field(payload, "Items")
+            if not isinstance(items, list) or any(
+                not isinstance(i, dict) for i in items
+            ):
+                raise JellyfinError(f"Jellyfin {path} enthält keine gültige Item-Liste")
+            result.extend(items)
             total = _as_int(_field(payload, "TotalRecordCount"))
             start_index += len(items)
-            if (
-                not items
-                or len(items) < page_size
-                or (total is not None and start_index >= total)
+            if not items and total is not None and start_index < total:
+                raise JellyfinError(
+                    f"Jellyfin {path} lieferte eine unvollständige Liste"
+                )
+            if (total is not None and start_index >= total) or (
+                total is None and len(items) < page_size
             ):
                 break
         return result

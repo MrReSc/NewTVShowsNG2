@@ -8,6 +8,7 @@ from .config import Config
 from .feeds import FeedClient, FeedError
 from .jellyfin import JellyfinClient, JellyfinError
 from .matching import match_release
+from .models import SeasonInventory
 from .parsing import parse_release
 from .rendering import Renderer
 from .storage import Storage
@@ -28,7 +29,10 @@ class Scanner:
         self.storage = storage
         self.renderer = renderer
         self.jellyfin = jellyfin or JellyfinClient(
-            config.jellyfin_url, config.jellyfin_api_key, config.request_timeout
+            config.jellyfin_url,
+            config.jellyfin_api_key,
+            config.jellyfin_username,
+            config.request_timeout,
         )
         self.feeds = feeds or FeedClient(config.request_timeout)
         self._lock = threading.Lock()
@@ -45,6 +49,7 @@ class Scanner:
             library = self.jellyfin.load_library()
             scan_warnings: list[str] = []
             season_cache: set[tuple[str, int]] = set()
+            series_cache: dict[str, dict[int, SeasonInventory] | None] = {}
             missing_metadata_warning_logged = False
 
             def load_season(series_id: str, season: int) -> None:
@@ -53,6 +58,38 @@ class Scanner:
                 if key in season_cache:
                     return
                 season_cache.add(key)
+
+                if series_id not in series_cache:
+                    try:
+                        series_cache[series_id] = self.jellyfin.load_series_episodes(
+                            series_id
+                        )
+                    except JellyfinError as exc:
+                        series_cache[series_id] = None
+                        message = (
+                            f"Jellyfin-Sollzahl und Gesehen-Status für {series_id} "
+                            f"konnten nicht geladen werden: {exc}"
+                        )
+                        scan_warnings.append(message)
+                        LOGGER.warning("%s", message)
+                inventories = series_cache[series_id]
+                if inventories is None:
+                    return
+                inventory = inventories.get(season, SeasonInventory())
+                library.set_played_episodes(
+                    series_id,
+                    season,
+                    inventory.played,
+                    complete=bool(inventory.episodes)
+                    and inventory.played_status_complete,
+                )
+                if not inventory.played_status_complete:
+                    message = (
+                        f"Jellyfin-Gesehen-Status für {series_id} S{season:02d} "
+                        "ist unvollständig; nur bestätigte Gesehen-Markierungen gelten"
+                    )
+                    scan_warnings.append(message)
+                    LOGGER.warning("%s", message)
 
                 if not library.missing_episode_tracking_enabled:
                     if not missing_metadata_warning_logged:
@@ -66,18 +103,7 @@ class Scanner:
                     return
 
                 local_episodes = library.episode_numbers(series_id, season)
-                try:
-                    expected_episodes = self.jellyfin.load_season_episodes(
-                        series_id, season
-                    )
-                except JellyfinError as exc:
-                    message = (
-                        f"Jellyfin-Sollzahl für {series_id} S{season:02d} "
-                        f"konnte nicht geladen werden: {exc}"
-                    )
-                    scan_warnings.append(message)
-                    LOGGER.warning("%s", message)
-                    return
+                expected_episodes = inventory.episodes
 
                 if not local_episodes.issubset(expected_episodes):
                     message = (

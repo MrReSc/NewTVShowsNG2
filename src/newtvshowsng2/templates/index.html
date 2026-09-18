@@ -203,14 +203,20 @@
                   </td>
                   <td class="series" data-label="Jellyfin-Serie">{{ row.matched_series_name }}</td>
                   <td class="inventory" data-label="Bestand">
-                    {{ row.jellyfin_episode_count or 0 }} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %}
+                    {{ row.jellyfin_episode_count or 0 }} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %} vorhanden
+                    <small>{% if row.jellyfin_played_episode_count is not none %}{{ row.jellyfin_played_episode_count }}{% else %}?{% endif %} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %} gesehen</small>
                     <small>Episoden in S{{ "%02d" | format(row.season) }}</small>
+                    {% if row.needed_episodes %}
+                      <small>Noch benötigt: {% for number in row.needed_episodes %}E{{ "%02d" | format(number) }}{% if not loop.last %}, {% endif %}{% endfor %}</small>
+                    {% elif row.is_current and row.episode is none %}
+                      <small>Sollbestand unbekannt</small>
+                    {% endif %}
                   </td>
                   <td class="status-col" data-label="Status">
                     <div class="badge-row">
                       {% if row.is_new %}<span class="badge new">Neu</span>{% endif %}
                       {% if row.is_current %}<span class="badge open">Fehlend</span>
-                      {% else %}<span class="badge done">In Jellyfin</span>{% endif %}
+                      {% else %}<span class="badge done">{{ {"available": "Vorhanden", "played": "Gesehen", "covered": "Vorhanden/gesehen", "removed": "Serie nicht mehr vorhanden"}.get(row.status_reason, "Status noch nicht geprüft") }}</span>{% endif %}
                       {% if row.match_warning %}<span class="badge warning">Zuordnung prüfen</span>{% endif %}
                     </div>
                   </td>

@@ -42,6 +42,13 @@ class Match:
 
 
 @dataclass(slots=True)
+class SeasonInventory:
+    episodes: set[int] = field(default_factory=set)
+    played: set[int] = field(default_factory=set)
+    played_status_complete: bool = True
+
+
+@dataclass(slots=True)
 class Library:
     series: list[Series]
     episodes: set[tuple[str, int, int]] = field(default_factory=set)
@@ -49,6 +56,8 @@ class Library:
     expected_episodes: dict[tuple[str, int], set[int]] = field(default_factory=dict)
     highest_episode: dict[tuple[str, int], int] = field(default_factory=dict)
     missing_episode_tracking_enabled: bool = False
+    played_by_season: dict[tuple[str, int], set[int]] = field(default_factory=dict)
+    played_counts_known: set[tuple[str, int]] = field(default_factory=set)
 
     def add_episode(self, series_id: str, season: int, episode: int) -> None:
         self.episodes.add((series_id, season, episode))
@@ -67,7 +76,28 @@ class Library:
     def set_expected_episodes(
         self, series_id: str, season: int, episodes: set[int]
     ) -> None:
-        self.expected_episodes[(series_id, season)] = set(episodes)
+        key = (series_id, season)
+        if episodes:
+            self.expected_episodes[key] = set(episodes)
+        else:
+            self.expected_episodes.pop(key, None)
+
+    def set_played_episodes(
+        self, series_id: str, season: int, episodes: set[int], *, complete: bool
+    ) -> None:
+        key = (series_id, season)
+        self.played_by_season[key] = set(episodes)
+        self.played_counts_known.discard(key)
+        if complete:
+            self.played_counts_known.add(key)
+
+    def played_numbers(self, series_id: str, season: int) -> set[int]:
+        return set(self.played_by_season.get((series_id, season), set()))
+
+    def played_count(self, series_id: str, season: int) -> int | None:
+        if (series_id, season) not in self.played_counts_known:
+            return None
+        return len(self.played_numbers(series_id, season))
 
     def season_counts(self, series_id: str, season: int) -> tuple[int, int | None]:
         available = len(self.episode_numbers(series_id, season))

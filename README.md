@@ -15,6 +15,7 @@ services:
     environment:
       JELLYFIN_URL: ${JELLYFIN_URL:?JELLYFIN_URL muss gesetzt sein}
       JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:?JELLYFIN_API_KEY muss gesetzt sein}
+      JELLYFIN_USERNAME: ${JELLYFIN_USERNAME:?JELLYFIN_USERNAME muss gesetzt sein}
       RSS_URLS: ${RSS_URLS:?RSS_URLS muss gesetzt sein}
       CHECK_INTERVAL_HOURS: ${CHECK_INTERVAL_HOURS:-1}
       MAX_HISTORY: ${MAX_HISTORY:-300}
@@ -32,6 +33,7 @@ services:
 ```dotenv
 JELLYFIN_URL=http://192.168.0.2:8096
 JELLYFIN_API_KEY=dein-api-key
+JELLYFIN_USERNAME=Hans
 RSS_URLS=https://example.org/serien/feed
 CHECK_INTERVAL_HOURS=1
 MAX_HISTORY=300

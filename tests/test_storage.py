@@ -58,7 +58,9 @@ def test_initialize_migrates_existing_database_without_data_loss(tmp_path) -> No
             ),
         )
 
-    Storage(path).initialize()
+    storage = Storage(path)
+    storage.initialize()
+    storage.initialize()
 
     with sqlite3.connect(path) as connection:
         columns = {
@@ -69,4 +71,20 @@ def test_initialize_migrates_existing_database_without_data_loss(tmp_path) -> No
         ).fetchone()[0]
     assert "jellyfin_episode_count" in columns
     assert "jellyfin_expected_episode_count" in columns
+    assert {
+        "jellyfin_played_episode_count",
+        "needed_episodes",
+        "status_reason",
+    } <= columns
     assert title == "Show.S03"
+    row = storage.announcements()[0]
+    assert row["jellyfin_played_episode_count"] is None
+    assert row["needed_episodes"] is None
+    assert row["status_reason"] is None
+    with sqlite3.connect(path) as connection:
+        assert {
+            r[0]
+            for r in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        } == {"announcements", "app_state"}

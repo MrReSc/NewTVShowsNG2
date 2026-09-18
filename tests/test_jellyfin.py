@@ -1,4 +1,5 @@
 import pytest
+import requests
 
 from newtvshowsng2.jellyfin import JellyfinClient, JellyfinError
 
@@ -10,7 +11,7 @@ class Response:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise RuntimeError(f"HTTP {self.status_code}")
+            raise requests.HTTPError(f"HTTP {self.status_code}")
 
     def json(self):
         return self.payload
@@ -21,11 +22,37 @@ class Session:
         self.headers = {}
         self.version = version
         self.calls = []
+        self.users = [
+            {
+                "Id": "user-1",
+                "Name": "Hans",
+                "Policy": {"IsDisabled": False},
+                "Configuration": {"DisplayMissingEpisodes": False},
+            }
+        ]
+        self.episode_items = [
+            {
+                "ParentIndexNumber": 3,
+                "IndexNumber": 1,
+                "IndexNumberEnd": 2,
+                "LocationType": "FileSystem",
+                "UserData": {"Played": True},
+            },
+            {
+                "ParentIndexNumber": 3,
+                "IndexNumber": 3,
+                "LocationType": "Virtual",
+                "PremiereDate": "2099-01-01T00:00:00Z",
+                "UserData": {"Played": False},
+            },
+        ]
 
     def get(self, url, params=None, timeout=None):
         self.calls.append((url, params, timeout))
         if url.endswith("/System/Info/Public"):
             return Response({"Version": self.version})
+        if url.endswith("/Users"):
+            return Response(self.users)
         if url.endswith("/Library/VirtualFolders"):
             return Response(
                 [
@@ -43,23 +70,14 @@ class Session:
                 ]
             )
         if "/Shows/" in url and url.endswith("/Episodes"):
+            # Reproduce Jellyfin's hidden virtual seasons with DisplayMissingEpisodes=false.
+            if "season" in params:
+                return Response({"Items": [], "TotalRecordCount": 0})
+            start, limit = int(params["startIndex"]), int(params["limit"])
             return Response(
                 {
-                    "Items": [
-                        {
-                            "ParentIndexNumber": 3,
-                            "IndexNumber": 1,
-                            "IndexNumberEnd": 2,
-                            "LocationType": "FileSystem",
-                        },
-                        {
-                            "ParentIndexNumber": 3,
-                            "IndexNumber": 3,
-                            "LocationType": "Virtual",
-                            "PremiereDate": "2099-01-01T00:00:00Z",
-                        },
-                    ],
-                    "TotalRecordCount": 2,
+                    "Items": self.episode_items[start : start + limit],
+                    "TotalRecordCount": len(self.episode_items),
                 }
             )
         if params["includeItemTypes"] == "Series":
@@ -94,7 +112,9 @@ class Session:
 
 def test_loads_jellyfin_12_with_modern_authorization() -> None:
     session = Session()
-    client = JellyfinClient("http://jellyfin.test/base", "secret", session=session)
+    client = JellyfinClient(
+        "http://jellyfin.test/base", "secret", "hans", session=session
+    )
 
     library = client.load_library()
 
@@ -115,50 +135,30 @@ def test_loads_jellyfin_12_with_modern_authorization() -> None:
 
 
 def test_loads_complete_season_inventory_and_combined_episodes() -> None:
-    client = JellyfinClient("http://jellyfin.test", "secret", session=Session())
-
-    assert client.load_season_episodes("series-1", 3) == {1, 2, 3}
-
-
-def test_ignores_specials_displayed_with_regular_season() -> None:
     session = Session()
-    original_get = session.get
-
-    def get(url, params=None, timeout=None):
-        if "/Shows/" in url and url.endswith("/Episodes"):
-            return Response(
-                {
-                    "Items": [
-                        {"ParentIndexNumber": 3, "IndexNumber": 1},
-                        {"ParentIndexNumber": 3, "IndexNumber": 2},
-                        {"ParentIndexNumber": 0, "IndexNumber": 7},
-                    ]
-                }
-            )
-        return original_get(url, params, timeout)
-
-    session.get = get
-    client = JellyfinClient("http://jellyfin.test", "secret", session=session)
-
-    assert client.load_season_episodes("series-1", 3) == {1, 2}
+    client = JellyfinClient("http://jellyfin.test", "secret", "Hans", session=session)
+    client.load_library()
+    inventory = client.load_series_episodes("series-1")[3]
+    assert inventory.episodes == {1, 2, 3}
+    assert inventory.played == {1, 2}
+    params = session.calls[-1][1]
+    assert params["userId"] == "user-1"
+    assert params["enableUserData"] == "true"
+    assert "season" not in params and "seasonId" not in params
 
 
-def test_rejects_episode_from_another_regular_season() -> None:
+def test_groups_specials_and_other_seasons_separately() -> None:
     session = Session()
-    original_get = session.get
-
-    def get(url, params=None, timeout=None):
-        if "/Shows/" in url and url.endswith("/Episodes"):
-            return Response(
-                {"Items": [{"ParentIndexNumber": 2, "IndexNumber": 1}]}
-            )
-        return original_get(url, params, timeout)
-
-    session.get = get
-    client = JellyfinClient("http://jellyfin.test", "secret", session=session)
-
-    with pytest.raises(JellyfinError, match="Episode aus Staffel 2"):
-        client.load_season_episodes("series-1", 3)
+    session.episode_items += [
+        {"ParentIndexNumber": 0, "IndexNumber": 7, "UserData": {"Played": True}},
+        {"ParentIndexNumber": 4, "IndexNumber": 1, "UserData": {"Played": False}},
+    ]
+    client = JellyfinClient("http://jellyfin.test", "secret", "Hans", session=session)
+    client.load_library()
+    seasons = client.load_series_episodes("series-1")
+    assert seasons[3].episodes == {1, 2, 3}
+    assert seasons[0].episodes == seasons[0].played == {7}
+    assert seasons[4].episodes == {1}
 
 
 def test_missing_episode_tracking_must_be_enabled() -> None:
@@ -179,7 +179,7 @@ def test_missing_episode_tracking_must_be_enabled() -> None:
 
     session.get = get
     library = JellyfinClient(
-        "http://jellyfin.test", "secret", session=session
+        "http://jellyfin.test", "secret", "Hans", session=session
     ).load_library()
 
     assert not library.missing_episode_tracking_enabled
@@ -187,8 +187,134 @@ def test_missing_episode_tracking_must_be_enabled() -> None:
 
 def test_rejects_non_v12_server() -> None:
     client = JellyfinClient(
-        "http://jellyfin.test", "secret", session=Session("10.11.11")
+        "http://jellyfin.test", "secret", "Hans", session=Session("10.11.11")
     )
 
     with pytest.raises(JellyfinError, match="benötigt wird 12.x"):
         client.load_library()
+
+
+@pytest.mark.parametrize(
+    "users",
+    [
+        [],
+        [{"Name": "Other", "Id": "other"}],
+        [{"Name": "Hans", "Id": "one"}, {"Name": "HANS", "Id": "two"}],
+        [{"Name": "Hans", "Id": "one", "Policy": {"IsDisabled": True}}],
+        [{"Name": "Hans"}],
+        {},
+    ],
+)
+def test_rejects_invalid_or_ambiguous_user(users):
+    session = Session()
+    session.users = users
+    client = JellyfinClient("http://jellyfin.test", "secret", "Hans", session=session)
+    with pytest.raises(JellyfinError):
+        client.load_library()
+    assert client.user_id is None
+    assert not any(url.endswith("/Items") for url, _, _ in session.calls)
+
+
+def test_resolves_user_fresh_on_every_scan():
+    session = Session()
+    client = JellyfinClient("http://jellyfin.test", "secret", "Hans", session=session)
+    client.load_library()
+    session.users[0]["Policy"]["IsDisabled"] = True
+    with pytest.raises(JellyfinError, match="deaktiviert"):
+        client.load_library()
+    assert client.user_id is None
+    assert sum(url.endswith("/Users") for url, _, _ in session.calls) == 2
+
+
+def test_pages_and_deduplicates_episode_ranges():
+    session = Session()
+    session.episode_items = [
+        {
+            "ParentIndexNumber": 5,
+            "IndexNumber": 1,
+            "IndexNumberEnd": 2,
+            "UserData": {"Played": True},
+        }
+    ] * 500 + [
+        {"ParentIndexNumber": 5, "IndexNumber": 3, "UserData": {"Played": False}}
+    ]
+    client = JellyfinClient("http://jellyfin.test", "secret", "Hans", session=session)
+    client.load_library()
+    seasons = client.load_series_episodes("series-1")
+    assert seasons[5].episodes == {1, 2, 3}
+    assert seasons[5].played == {1, 2}
+    assert [
+        params["startIndex"]
+        for url, params, _ in session.calls
+        if url.endswith("/Episodes")
+    ] == ["0", "500"]
+
+
+def test_only_explicit_played_true_counts():
+    session = Session()
+    session.episode_items = [
+        {"parentIndexNumber": 5, "indexNumber": 1, "userData": {"played": True}},
+        {
+            "ParentIndexNumber": 5,
+            "IndexNumber": 2,
+            "UserData": {
+                "Played": False,
+                "PlayCount": 1,
+                "LastPlayedDate": "2026-07-04T18:10:14Z",
+            },
+        },
+        {"ParentIndexNumber": 5, "IndexNumber": 3},
+        {"ParentIndexNumber": 5, "IndexNumber": 4, "UserData": {"Played": "true"}},
+    ]
+    client = JellyfinClient("http://jellyfin.test", "secret", "Hans", session=session)
+    client.load_library()
+    inventory = client.load_series_episodes("series-1")[5]
+    assert inventory.played == {1}
+    assert inventory.episodes == {1, 2, 3, 4}
+    assert not inventory.played_status_complete
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"IndexNumber": 1},
+        {"ParentIndexNumber": 5},
+        {"ParentIndexNumber": 5, "IndexNumber": 3, "IndexNumberEnd": 1},
+    ],
+)
+def test_rejects_malformed_episode_inventory(item):
+    session = Session()
+    session.episode_items = [item]
+    client = JellyfinClient("http://jellyfin.test", "secret", "Hans", session=session)
+    client.load_library()
+    with pytest.raises(JellyfinError):
+        client.load_series_episodes("series-1")
+
+
+def test_http_failure_does_not_return_partial_inventory():
+    session = Session()
+    original = session.get
+
+    def get(url, params=None, timeout=None):
+        if url.endswith("/Episodes"):
+            if params["startIndex"] == "0":
+                return Response(
+                    {
+                        "Items": [
+                            {
+                                "ParentIndexNumber": 5,
+                                "IndexNumber": 1,
+                                "UserData": {"Played": True},
+                            }
+                        ],
+                        "TotalRecordCount": 2,
+                    }
+                )
+            return Response({}, status=500)
+        return original(url, params=params, timeout=timeout)
+
+    session.get = get
+    client = JellyfinClient("http://jellyfin.test", "secret", "Hans", session=session)
+    client.load_library()
+    with pytest.raises(JellyfinError, match="fehlgeschlagen"):
+        client.load_series_episodes("series-1")

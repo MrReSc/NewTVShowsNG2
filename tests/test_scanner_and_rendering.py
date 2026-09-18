@@ -1,30 +1,38 @@
+from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 from newtvshowsng2.config import Config
 from newtvshowsng2.jellyfin import JellyfinError
-from newtvshowsng2.models import FeedRelease, Library, Series
+from newtvshowsng2.models import FeedRelease, Library, SeasonInventory, Series
 from newtvshowsng2.rendering import Renderer, group_current_releases
 from newtvshowsng2.scanner import Scanner
 from newtvshowsng2.storage import Storage
 
 
 class Jellyfin:
-    def __init__(self, library, expected=None, error=None):
+    def __init__(self, library, expected=None, error=None, played=None):
         self.library = library
         self.expected = expected or {}
         self.error = error
-        self.season_calls = []
+        self.played = played or {}
+        self.series_calls = []
 
     def load_library(self):
-        return self.library
+        return deepcopy(self.library)
 
-    def load_season_episodes(self, series_id, season):
-        self.season_calls.append((series_id, season))
+    def load_series_episodes(self, series_id):
+        self.series_calls.append(series_id)
         if self.error:
             raise self.error
-        return set(self.expected[(series_id, season)])
+        return {
+            season: SeasonInventory(
+                set(episodes), set(self.played.get((sid, season), set()))
+            )
+            for (sid, season), episodes in self.expected.items()
+            if sid == series_id
+        }
 
 
 class Feeds:
@@ -39,6 +47,7 @@ def config(tmp_path: Path) -> Config:
     return Config(
         jellyfin_url="http://jellyfin.test",
         jellyfin_api_key="secret",
+        jellyfin_username="Hans",
         rss_urls=("https://feed.test/rss",),
         check_interval_hours=1,
         max_history=300,
@@ -132,7 +141,7 @@ def test_unknown_season_inventory_stays_current(tmp_path) -> None:
     assert row["jellyfin_episode_count"] == 10
     assert row["jellyfin_expected_episode_count"] is None
     assert storage.state()["scan_status"] == "warning"
-    assert jellyfin.season_calls == []
+    assert jellyfin.series_calls == [series.id]
 
 
 def test_season_api_error_stays_current(tmp_path) -> None:
@@ -192,14 +201,14 @@ def test_release_variants_stay_stored_but_are_grouped_in_current_view(tmp_path) 
 
     assert scanner.run()
     assert len(storage.announcements()) == 2
-    assert jellyfin.season_calls == [(series.id, 3)]
+    assert jellyfin.series_calls == [series.id]
     html = cfg.output_path.read_text(encoding="utf-8")
     current_html, history_html = html.split('<details class="history">', 1)
     assert current_html.count('data-label="Release"') == 1
     assert "1 Einträge" in current_html
     assert "The.Walking.Dead.Dead.City · S03" in current_html
-    assert '>720p</a>' in current_html
-    assert '>1080p</a>' in current_html
+    assert ">720p</a>" in current_html
+    assert ">1080p</a>" in current_html
     assert 'href="https://feed.test/post-1"' in current_html
     assert 'href="https://feed.test/post-2"' in current_html
     assert current_html.index(">720p</a>") < current_html.index(">1080p</a>")

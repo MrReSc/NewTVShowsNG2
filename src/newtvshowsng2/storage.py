@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from .models import FeedRelease, Library, Match, ParsedRelease
 
@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS announcements (
     jellyfin_episode INTEGER,
     jellyfin_episode_count INTEGER,
     jellyfin_expected_episode_count INTEGER,
+    jellyfin_played_episode_count INTEGER,
+    needed_episodes TEXT,
+    status_reason TEXT,
     is_current INTEGER NOT NULL DEFAULT 1,
     is_new INTEGER NOT NULL DEFAULT 1
 );
@@ -62,6 +65,12 @@ class Storage:
                 "jellyfin_expected_episode_count",
                 "INTEGER",
             )
+            for column, definition in (
+                ("jellyfin_played_episode_count", "INTEGER"),
+                ("needed_episodes", "TEXT"),
+                ("status_reason", "TEXT"),
+            ):
+                self._ensure_column(connection, "announcements", column, definition)
 
     def begin_scan(self, started_at: datetime, next_run_at: datetime) -> None:
         with self._connect() as connection:
@@ -117,9 +126,7 @@ class Storage:
         content_hash = hashlib.sha256(
             f"{feed.title}\0{feed.link}\0{feed.published_at.isoformat()}\0{feed.content}".encode()
         ).hexdigest()
-        local_episode, available_count, expected_count, is_current = _library_state(
-            library, match.series.id, parsed.season, parsed.episode
-        )
+        state = _library_state(library, match.series.id, parsed.season, parsed.episode)
 
         with self._connect() as connection:
             existing = connection.execute(
@@ -135,8 +142,9 @@ class Storage:
                     season, episode, imdb_id, matched_series_id,
                     matched_series_name, match_method, match_warning,
                     jellyfin_episode, jellyfin_episode_count,
-                    jellyfin_expected_episode_count, is_current, is_new
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    jellyfin_expected_episode_count, is_current,
+                    jellyfin_played_episode_count, needed_episodes, status_reason, is_new
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(source_key) DO UPDATE SET
                     guid = excluded.guid,
                     link = excluded.link,
@@ -157,6 +165,9 @@ class Storage:
                     jellyfin_expected_episode_count =
                         excluded.jellyfin_expected_episode_count,
                     is_current = excluded.is_current,
+                    jellyfin_played_episode_count = excluded.jellyfin_played_episode_count,
+                    needed_episodes = excluded.needed_episodes,
+                    status_reason = excluded.status_reason,
                     is_new = excluded.is_new
                 """,
                 (
@@ -177,10 +188,7 @@ class Storage:
                     match.series.name,
                     match.method,
                     int(match.warning),
-                    local_episode,
-                    available_count,
-                    expected_count,
-                    int(is_current),
+                    *state,
                     int(is_new),
                 ),
             )
@@ -199,29 +207,20 @@ class Storage:
                 season = row["season"]
                 episode = row["episode"]
                 if series_id not in valid_ids:
-                    local_episode = None
-                    available_count = 0
-                    expected_count = None
-                    is_current = False
+                    state = ReleaseState(None, 0, None, False, None, None, "removed")
                 else:
-                    (
-                        local_episode,
-                        available_count,
-                        expected_count,
-                        is_current,
-                    ) = _library_state(library, series_id, season, episode)
+                    state = _library_state(library, series_id, season, episode)
                 connection.execute(
                     """
                     UPDATE announcements
                     SET jellyfin_episode = ?, jellyfin_episode_count = ?,
-                        jellyfin_expected_episode_count = ?, is_current = ?
+                        jellyfin_expected_episode_count = ?, is_current = ?,
+                        jellyfin_played_episode_count = ?, needed_episodes = ?,
+                        status_reason = ?
                     WHERE source_key = ?
                     """,
                     (
-                        local_episode,
-                        available_count,
-                        expected_count,
-                        int(is_current),
+                        *state,
                         row["source_key"],
                     ),
                 )
@@ -260,7 +259,11 @@ class Storage:
             query += " WHERE is_current = 1"
         query += " ORDER BY published_at DESC, first_seen_at DESC"
         with self._connect() as connection:
-            return [dict(row) for row in connection.execute(query).fetchall()]
+            rows = [dict(row) for row in connection.execute(query).fetchall()]
+        for row in rows:
+            if row["needed_episodes"] is not None:
+                row["needed_episodes"] = json.loads(row["needed_episodes"])
+        return rows
 
     def state(self) -> dict[str, str]:
         with self._connect() as connection:
@@ -314,14 +317,43 @@ def _iso(value: datetime) -> str:
     return value.astimezone(UTC).isoformat()
 
 
+class ReleaseState(NamedTuple):
+    highest_episode: int | None
+    available_count: int
+    expected_count: int | None
+    is_current: bool
+    played_count: int | None
+    needed_episodes: str | None
+    status_reason: str
+
+
 def _library_state(
     library: Library, series_id: str, season: int, episode: int | None
-) -> tuple[int | None, int, int | None, bool]:
+) -> ReleaseState:
     highest_episode = library.episode_in_season(series_id, season)
     available_count, expected_count = library.season_counts(series_id, season)
-    if episode is not None:
-        is_current = not library.episode_exists(series_id, season, episode)
+    available = library.episode_numbers(series_id, season)
+    played = library.played_numbers(series_id, season)
+    required = (
+        {episode}
+        if episode is not None
+        else library.expected_episodes.get((series_id, season))
+    )
+    needed = required - (available | played) if required else None
+    if not required or needed:
+        reason = "missing"
+    elif required.issubset(available):
+        reason = "available"
+    elif required.issubset(played):
+        reason = "played"
     else:
-        complete = library.season_is_complete(series_id, season)
-        is_current = complete is not True
-    return highest_episode, available_count, expected_count, is_current
+        reason = "covered"
+    return ReleaseState(
+        highest_episode,
+        available_count,
+        expected_count,
+        reason == "missing",
+        library.played_count(series_id, season),
+        json.dumps(sorted(needed)) if needed is not None else None,
+        reason,
+    )

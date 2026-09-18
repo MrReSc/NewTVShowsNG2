@@ -12,6 +12,7 @@ class Config:
     jellyfin_url: str
     jellyfin_api_key: str
     rss_urls: tuple[str, ...]
+    jellyfin_username: str
     check_interval_hours: float = 1.0
     max_history: int = 300
     timezone: str = "Europe/Zurich"
@@ -69,6 +70,7 @@ class Config:
             jellyfin_url=jellyfin_url,
             jellyfin_api_key=jellyfin_api_key,
             rss_urls=rss_urls,
+            jellyfin_username=_required("JELLYFIN_USERNAME"),
             check_interval_hours=interval,
             max_history=max_history,
             timezone=timezone,
