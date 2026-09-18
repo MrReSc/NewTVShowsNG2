@@ -90,19 +90,17 @@
     th { background: #0b111e; color: var(--muted); font-size: .69rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
     tbody tr:last-child td { border-bottom: 0; }
     tbody tr:hover { background: var(--surface-hover); }
-    .release { width: 39%; overflow-wrap: anywhere; font-size: .9rem; font-weight: 650; }
+    .release { width: 46%; overflow-wrap: anywhere; font-size: .9rem; font-weight: 650; }
     .release a { color: var(--text); text-decoration-color: #53617a; }
     .release a:visited { color: var(--visited); text-decoration-color: #a66fd1; }
     .release-title { display: block; }
     .variant-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
     .variant-links a { padding: 2px 7px; border: 1px solid #53617a; border-radius: 999px; font-size: .74rem; font-weight: 750; text-decoration: none; }
     .variant-links a:visited { border-color: #a66fd1; }
-    .release-meta { display: block; margin-top: 4px; color: var(--muted); font-size: .76rem; font-weight: 650; }
-    .series { width: 20%; overflow-wrap: anywhere; }
-    .inventory { width: 14%; white-space: nowrap; }
+    .inventory { width: 20%; white-space: nowrap; }
     .inventory small { display: block; margin-top: 2px; color: var(--muted); }
     .status-col { width: 14%; }
-    .date-col { width: 13%; color: var(--muted); font-size: .82rem; white-space: nowrap; }
+    .date-col { width: 20%; color: var(--muted); }
     .badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
     .badge { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border: 1px solid transparent; border-radius: 999px; font-size: .7rem; font-weight: 800; line-height: 1.2; }
     .badge.new { border-color: #4768c1; background: var(--primary-soft); color: #b9c9ff; }
@@ -179,7 +177,6 @@
             <thead>
               <tr>
                 <th class="release">Release</th>
-                <th class="series">Jellyfin-Serie</th>
                 <th class="inventory">Bestand</th>
                 <th class="status-col">Status</th>
                 <th class="date-col">Datum</th>
@@ -197,11 +194,9 @@
                         {% endfor %}
                       </span>
                     {% else %}
-                      <a href="{{ row.link }}" target="_blank" rel="noopener noreferrer">{{ row.title }}</a>
-                      <span class="release-meta">S{{ "%02d" | format(row.season) }}{% if row.episode is not none %}E{{ "%02d" | format(row.episode) }}{% endif %}</span>
+                      <a href="{{ row.link }}" title="{{ row.title }}" target="_blank" rel="noopener noreferrer">{{ row.matched_series_name }} · S{{ "%02d" | format(row.season) }}{% if row.episode is not none %}E{{ "%02d" | format(row.episode) }}{% endif %}</a>
                     {% endif %}
                   </td>
-                  <td class="series" data-label="Jellyfin-Serie">{{ row.matched_series_name }}</td>
                   <td class="inventory" data-label="Bestand">
                     {{ row.jellyfin_episode_count or 0 }} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %} vorhanden
                     <small>{% if row.jellyfin_played_episode_count is not none %}{{ row.jellyfin_played_episode_count }}{% else %}?{% endif %} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %} gesehen</small>

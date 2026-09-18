@@ -126,7 +126,7 @@ def _build_release_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
     marker = f"S{int(newest['season']):02d}"
     if newest["episode"] is not None:
         marker += f"E{int(newest['episode']):02d}"
-    base_title = newest.get("parsed_title") or newest["matched_series_name"]
+    base_title = newest["matched_series_name"]
     group["display_title"] = f"{base_title} · {marker}"
     group["is_new"] = any(bool(row["is_new"]) for row in rows)
     group["match_warning"] = any(bool(row["match_warning"]) for row in rows)

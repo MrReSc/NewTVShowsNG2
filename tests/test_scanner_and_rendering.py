@@ -3,6 +3,8 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from newtvshowsng2.config import Config
 from newtvshowsng2.jellyfin import JellyfinError
 from newtvshowsng2.models import FeedRelease, Library, SeasonInventory, Series
@@ -184,17 +186,20 @@ def test_contradictory_season_inventory_stays_unknown(tmp_path) -> None:
     assert "widersprüchliche Episodendaten" in storage.state()["feed_errors"]
 
 
-def test_release_variants_stay_stored_but_are_grouped_in_current_view(tmp_path) -> None:
+@pytest.mark.parametrize("marker", ["S03", "S03E02"])
+def test_release_variants_stay_stored_but_are_grouped_in_current_view(
+    tmp_path, marker
+) -> None:
     cfg, storage, renderer = setup(tmp_path)
     series = Series("dead-city", "The Walking Dead: Dead City", imdb_id="tt18546730")
     library = Library([series], missing_episode_tracking_enabled=True)
     jellyfin = Jellyfin(library, {(series.id, 3): set(range(1, 11))})
-    first = release("The.Walking.Dead.Dead.City.S03.German.720p-WAYNE")
+    first = release(f"The.Walking.Dead.Dead.City.{marker}.German.720p-WAYNE")
     second = replace(
         first,
         guid="post-2",
         link="https://feed.test/post-2",
-        title="The.Walking.Dead.Dead.City.S03.German.1080p-WvF",
+        title=f"The.Walking.Dead.Dead.City.{marker}.German.1080p-WvF",
         published_at=datetime(2026, 9, 9, 18, 0, tzinfo=UTC),
     )
     scanner = Scanner(cfg, storage, renderer, jellyfin, Feeds([first, second]))
@@ -206,13 +211,19 @@ def test_release_variants_stay_stored_but_are_grouped_in_current_view(tmp_path) 
     current_html, history_html = html.split('<details class="history">', 1)
     assert current_html.count('data-label="Release"') == 1
     assert "1 Einträge" in current_html
-    assert "The.Walking.Dead.Dead.City · S03" in current_html
+    assert f">The Walking Dead: Dead City · {marker}</span>" in current_html
     assert ">720p</a>" in current_html
     assert ">1080p</a>" in current_html
     assert 'href="https://feed.test/post-1"' in current_html
     assert 'href="https://feed.test/post-2"' in current_html
     assert current_html.index(">720p</a>") < current_html.index(">1080p</a>")
     assert history_html.count('data-label="Release"') == 2
+    assert history_html.count(f">The Walking Dead: Dead City · {marker}</a>") == 2
+    assert f'title="{first.title}"' in history_html
+    assert f'title="{second.title}"' in history_html
+    for section in (current_html, history_html):
+        assert section.count("<th class=") == 4
+        assert "Jellyfin-Serie" not in section
     assert "2 Einträge" in history_html
 
 
@@ -339,4 +350,4 @@ def test_html_is_escaped_and_keeps_reduced_columns(tmp_path) -> None:
     assert ">Quelle</a>" in html
     assert "IMDb-ID" not in html
     assert "a:visited" in html
-    assert html.count("<th ") == 10
+    assert html.count("<th ") == 8
