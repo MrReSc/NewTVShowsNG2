@@ -153,7 +153,8 @@ class Scanner:
                             match.series.name,
                             match.method,
                         )
-                    load_season(match.series.id, parsed.season)
+                    for season in parsed.seasons:
+                        load_season(match.series.id, season)
                     self.storage.upsert_release(
                         feed_release, parsed, match, library, started_at
                     )

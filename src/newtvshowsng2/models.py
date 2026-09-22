@@ -20,8 +20,13 @@ class ParsedRelease:
     normalized_title: str
     year: int | None
     season: int
+    season_end: int
     episode: int | None
     imdb_id: str | None
+
+    @property
+    def seasons(self) -> range:
+        return range(self.season, self.season_end + 1)
 
 
 @dataclass(frozen=True, slots=True)

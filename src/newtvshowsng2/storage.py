@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from .models import FeedRelease, Library, Match, ParsedRelease
+from .parsing import parse_release
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS announcements (
     source_key TEXT PRIMARY KEY,
+    feed_item_key TEXT NOT NULL,
     feed_url TEXT NOT NULL,
     guid TEXT,
     link TEXT NOT NULL,
@@ -71,6 +73,14 @@ class Storage:
                 ("status_reason", "TEXT"),
             ):
                 self._ensure_column(connection, "announcements", column, definition)
+            self._ensure_column(
+                connection, "announcements", "feed_item_key", "TEXT"
+            )
+            self._migrate_feed_item_keys(connection)
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS announcements_feed_item "
+                "ON announcements(feed_item_key)"
+            )
 
     def begin_scan(self, started_at: datetime, next_run_at: datetime) -> None:
         with self._connect() as connection:
@@ -122,75 +132,101 @@ class Storage:
         library: Library,
         seen_at: datetime,
     ) -> None:
-        source_key = _source_key(feed)
+        feed_item_key = _feed_item_key(feed)
         content_hash = hashlib.sha256(
             f"{feed.title}\0{feed.link}\0{feed.published_at.isoformat()}\0{feed.content}".encode()
         ).hexdigest()
-        state = _library_state(library, match.series.id, parsed.season, parsed.episode)
+        source_keys = [
+            _source_key(feed_item_key, season, parsed.episode)
+            for season in parsed.seasons
+        ]
 
         with self._connect() as connection:
-            existing = connection.execute(
-                "SELECT content_hash FROM announcements WHERE source_key = ?",
-                (source_key,),
-            ).fetchone()
-            is_new = existing is None or existing["content_hash"] != content_hash
+            existing = {
+                str(row["source_key"]): str(row["content_hash"])
+                for row in connection.execute(
+                    "SELECT source_key, content_hash FROM announcements "
+                    "WHERE feed_item_key = ?",
+                    (feed_item_key,),
+                )
+            }
+            for season, source_key in zip(parsed.seasons, source_keys, strict=True):
+                state = _library_state(
+                    library, match.series.id, season, parsed.episode
+                )
+                is_new = (
+                    source_key not in existing
+                    or existing[source_key] != content_hash
+                )
+                connection.execute(
+                    """
+                    INSERT INTO announcements (
+                        source_key, feed_item_key, feed_url, guid, link, title,
+                        published_at, first_seen_at, last_seen_at, content_hash,
+                        parsed_title, season, episode, imdb_id, matched_series_id,
+                        matched_series_name, match_method, match_warning,
+                        jellyfin_episode, jellyfin_episode_count,
+                        jellyfin_expected_episode_count, is_current,
+                        jellyfin_played_episode_count, needed_episodes,
+                        status_reason, is_new
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(source_key) DO UPDATE SET
+                        feed_item_key = excluded.feed_item_key,
+                        feed_url = excluded.feed_url,
+                        guid = excluded.guid,
+                        link = excluded.link,
+                        title = excluded.title,
+                        published_at = excluded.published_at,
+                        last_seen_at = excluded.last_seen_at,
+                        content_hash = excluded.content_hash,
+                        parsed_title = excluded.parsed_title,
+                        season = excluded.season,
+                        episode = excluded.episode,
+                        imdb_id = excluded.imdb_id,
+                        matched_series_id = excluded.matched_series_id,
+                        matched_series_name = excluded.matched_series_name,
+                        match_method = excluded.match_method,
+                        match_warning = excluded.match_warning,
+                        jellyfin_episode = excluded.jellyfin_episode,
+                        jellyfin_episode_count = excluded.jellyfin_episode_count,
+                        jellyfin_expected_episode_count =
+                            excluded.jellyfin_expected_episode_count,
+                        is_current = excluded.is_current,
+                        jellyfin_played_episode_count =
+                            excluded.jellyfin_played_episode_count,
+                        needed_episodes = excluded.needed_episodes,
+                        status_reason = excluded.status_reason,
+                        is_new = excluded.is_new
+                    """,
+                    (
+                        source_key,
+                        feed_item_key,
+                        feed.feed_url,
+                        feed.guid,
+                        feed.link,
+                        feed.title,
+                        _iso(feed.published_at),
+                        _iso(seen_at),
+                        _iso(seen_at),
+                        content_hash,
+                        parsed.series_title,
+                        season,
+                        parsed.episode,
+                        parsed.imdb_id,
+                        match.series.id,
+                        match.series.name,
+                        match.method,
+                        int(match.warning),
+                        *state,
+                        int(is_new),
+                    ),
+                )
+
+            placeholders = ", ".join("?" for _ in source_keys)
             connection.execute(
-                """
-                INSERT INTO announcements (
-                    source_key, feed_url, guid, link, title, published_at,
-                    first_seen_at, last_seen_at, content_hash, parsed_title,
-                    season, episode, imdb_id, matched_series_id,
-                    matched_series_name, match_method, match_warning,
-                    jellyfin_episode, jellyfin_episode_count,
-                    jellyfin_expected_episode_count, is_current,
-                    jellyfin_played_episode_count, needed_episodes, status_reason, is_new
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(source_key) DO UPDATE SET
-                    guid = excluded.guid,
-                    link = excluded.link,
-                    title = excluded.title,
-                    published_at = excluded.published_at,
-                    last_seen_at = excluded.last_seen_at,
-                    content_hash = excluded.content_hash,
-                    parsed_title = excluded.parsed_title,
-                    season = excluded.season,
-                    episode = excluded.episode,
-                    imdb_id = excluded.imdb_id,
-                    matched_series_id = excluded.matched_series_id,
-                    matched_series_name = excluded.matched_series_name,
-                    match_method = excluded.match_method,
-                    match_warning = excluded.match_warning,
-                    jellyfin_episode = excluded.jellyfin_episode,
-                    jellyfin_episode_count = excluded.jellyfin_episode_count,
-                    jellyfin_expected_episode_count =
-                        excluded.jellyfin_expected_episode_count,
-                    is_current = excluded.is_current,
-                    jellyfin_played_episode_count = excluded.jellyfin_played_episode_count,
-                    needed_episodes = excluded.needed_episodes,
-                    status_reason = excluded.status_reason,
-                    is_new = excluded.is_new
-                """,
-                (
-                    source_key,
-                    feed.feed_url,
-                    feed.guid,
-                    feed.link,
-                    feed.title,
-                    _iso(feed.published_at),
-                    _iso(seen_at),
-                    _iso(seen_at),
-                    content_hash,
-                    parsed.series_title,
-                    parsed.season,
-                    parsed.episode,
-                    parsed.imdb_id,
-                    match.series.id,
-                    match.series.name,
-                    match.method,
-                    int(match.warning),
-                    *state,
-                    int(is_new),
-                ),
+                f"DELETE FROM announcements WHERE feed_item_key = ? "
+                f"AND source_key NOT IN ({placeholders})",
+                (feed_item_key, *source_keys),
             )
 
     def refresh_library_state(self, library: Library) -> None:
@@ -285,6 +321,57 @@ class Storage:
             connection.close()
 
     @staticmethod
+    def _migrate_feed_item_keys(connection: sqlite3.Connection) -> None:
+        rows = connection.execute(
+            "SELECT * FROM announcements WHERE feed_item_key IS NULL"
+        ).fetchall()
+        if not rows:
+            return
+
+        columns = [
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(announcements)")
+        ]
+        placeholders = ", ".join("?" for _ in columns)
+        column_names = ", ".join(columns)
+        for row in rows:
+            values = dict(row)
+            feed_item_key = str(values["source_key"])
+            parsed = parse_release(str(values["title"]))
+            seasons = (
+                tuple(parsed.seasons)
+                if parsed is not None
+                else (int(values["season"]),)
+            )
+            connection.execute(
+                "DELETE FROM announcements WHERE source_key = ?",
+                (values["source_key"],),
+            )
+            for season in seasons:
+                migrated = dict(values)
+                migrated["feed_item_key"] = feed_item_key
+                migrated["source_key"] = _source_key(
+                    feed_item_key, season, migrated["episode"]
+                )
+                migrated["season"] = season
+                if len(seasons) > 1:
+                    for name, value in (
+                        ("jellyfin_episode", None),
+                        ("jellyfin_episode_count", None),
+                        ("jellyfin_expected_episode_count", None),
+                        ("jellyfin_played_episode_count", None),
+                        ("needed_episodes", None),
+                        ("status_reason", None),
+                        ("is_current", 1),
+                    ):
+                        migrated[name] = value
+                connection.execute(
+                    f"INSERT INTO announcements ({column_names}) "
+                    f"VALUES ({placeholders})",
+                    tuple(migrated[name] for name in columns),
+                )
+
+    @staticmethod
     def _set_many(connection: sqlite3.Connection, values: dict[str, str]) -> None:
         connection.executemany(
             """
@@ -306,9 +393,18 @@ class Storage:
             connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
-def _source_key(feed: FeedRelease) -> str:
+def _feed_item_key(feed: FeedRelease) -> str:
     identity = feed.guid or feed.link
     return hashlib.sha256(f"{feed.feed_url}\0{identity}".encode()).hexdigest()
+
+
+def _source_key(
+    feed_item_key: str, season: int, episode: int | None
+) -> str:
+    episode_key = "" if episode is None else str(episode)
+    return hashlib.sha256(
+        f"{feed_item_key}\0season:{season}\0episode:{episode_key}".encode()
+    ).hexdigest()
 
 
 def _iso(value: datetime) -> str:

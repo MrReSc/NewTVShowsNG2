@@ -14,6 +14,12 @@ RELEASE_MARKER = re.compile(
     r"(?<![A-Za-z0-9])S(?P<season>\d{1,3})(?:E(?P<episode>\d{1,3}))?(?!\d)",
     re.IGNORECASE,
 )
+SEASON_RANGE = re.compile(
+    r"(?<![A-Za-z0-9])S(?P<season>\d{1,3})(?!\d)"
+    r"[.\s_]*(?:-|–|—|to|bis)[.\s_]*"
+    r"S(?P<season_end>\d{1,3})(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
 IMDB_ID = re.compile(r"\btt\d{7,10}\b", re.IGNORECASE)
 TRAILING_YEAR = re.compile(r"(?:^|\s)((?:19|20)\d{2})$")
 
@@ -36,8 +42,23 @@ def normalize_title(value: str) -> str:
 
 
 def parse_release(title: str, content: str = "") -> ParsedRelease | None:
-    marker = RELEASE_MARKER.search(title)
+    range_marker = SEASON_RANGE.search(title)
+    single_marker = RELEASE_MARKER.search(title)
+    if range_marker is not None and (
+        single_marker is None or range_marker.start() <= single_marker.start()
+    ):
+        marker = range_marker
+    else:
+        range_marker = None
+        marker = single_marker
     if marker is None:
+        return None
+
+    season = int(marker.group("season"))
+    season_end = (
+        int(range_marker.group("season_end")) if range_marker is not None else season
+    )
+    if season_end < season:
         return None
 
     series_title = re.sub(r"[.\s_-]+$", "", title[: marker.start()]).strip()
@@ -57,8 +78,13 @@ def parse_release(title: str, content: str = "") -> ParsedRelease | None:
         series_title=series_title,
         normalized_title=normalized,
         year=year,
-        season=int(marker.group("season")),
-        episode=int(marker.group("episode")) if marker.group("episode") else None,
+        season=season,
+        season_end=season_end,
+        episode=(
+            int(marker.group("episode"))
+            if range_marker is None and marker.group("episode")
+            else None
+        ),
         imdb_id=imdb_match.group(0).lower() if imdb_match else None,
     )
 

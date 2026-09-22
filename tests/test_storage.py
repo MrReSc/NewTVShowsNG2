@@ -66,15 +66,14 @@ def test_initialize_migrates_existing_database_without_data_loss(tmp_path) -> No
         columns = {
             row[1] for row in connection.execute("PRAGMA table_info(announcements)")
         }
-        title = connection.execute(
-            "SELECT title FROM announcements WHERE source_key = 'source'"
-        ).fetchone()[0]
+        title = connection.execute("SELECT title FROM announcements").fetchone()[0]
     assert "jellyfin_episode_count" in columns
     assert "jellyfin_expected_episode_count" in columns
     assert {
         "jellyfin_played_episode_count",
         "needed_episodes",
         "status_reason",
+        "feed_item_key",
     } <= columns
     assert title == "Show.S03"
     row = storage.announcements()[0]
@@ -88,3 +87,51 @@ def test_initialize_migrates_existing_database_without_data_loss(tmp_path) -> No
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         } == {"announcements", "app_state"}
+
+
+def test_initialize_expands_legacy_season_range_idempotently(tmp_path) -> None:
+    path = tmp_path / "legacy-range.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(LEGACY_SCHEMA)
+        connection.execute(
+            """
+            INSERT INTO announcements (
+                source_key, feed_url, link, title, published_at, first_seen_at,
+                last_seen_at, content_hash, parsed_title, season,
+                matched_series_id, matched_series_name, match_method,
+                jellyfin_episode, is_current, is_new
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "legacy-source",
+                "https://feed.test/rss",
+                "https://feed.test/outlander",
+                "Outlander.S05.-.S08.Complete.German",
+                "2026-09-10T00:00:00+00:00",
+                "2026-09-10T01:00:00+00:00",
+                "2026-09-10T02:00:00+00:00",
+                "hash",
+                "Outlander",
+                5,
+                "outlander",
+                "Outlander",
+                "Titel",
+                12,
+                0,
+                0,
+            ),
+        )
+
+    storage = Storage(path)
+    storage.initialize()
+    storage.initialize()
+
+    rows = storage.announcements()
+    assert {row["season"] for row in rows} == {5, 6, 7, 8}
+    assert len(rows) == 4
+    assert {row["feed_item_key"] for row in rows} == {"legacy-source"}
+    assert len({row["source_key"] for row in rows}) == 4
+    assert all(row["link"] == "https://feed.test/outlander" for row in rows)
+    assert all(row["first_seen_at"] == "2026-09-10T01:00:00+00:00" for row in rows)
+    assert all(row["jellyfin_episode"] is None for row in rows)
+    assert all(row["is_current"] for row in rows)

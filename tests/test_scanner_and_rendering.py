@@ -128,6 +128,115 @@ def test_concrete_episode_resolves_only_when_exact_episode_exists(tmp_path) -> N
     assert storage.announcements()[0]["is_current"] == 0
 
 
+def test_season_range_creates_independent_entries_and_statuses(tmp_path) -> None:
+    cfg, storage, renderer = setup(tmp_path)
+    series = Series("dead-city", "The Walking Dead: Dead City", imdb_id="tt18546730")
+    library = Library([series], missing_episode_tracking_enabled=True)
+    for episode in (1, 2):
+        library.add_episode(series.id, 3, episode)
+    library.add_episode(series.id, 4, 1)
+    expected = {
+        (series.id, 3): {1, 2},
+        (series.id, 4): {1, 2},
+        (series.id, 5): {1, 2},
+    }
+    played = {(series.id, 5): {1, 2}}
+    ranged = release(
+        "The.Walking.Dead.Dead.City.S03.-.S06.Complete.German.1080p-WAYNE"
+    )
+    jellyfin = Jellyfin(library, expected, played=played)
+    scanner = Scanner(cfg, storage, renderer, jellyfin, Feeds([ranged]))
+
+    assert scanner.run()
+    rows = {row["season"]: row for row in storage.announcements()}
+    assert set(rows) == {3, 4, 5, 6}
+    assert {row["feed_item_key"] for row in rows.values()} == {
+        next(iter(rows.values()))["feed_item_key"]
+    }
+    assert len({row["source_key"] for row in rows.values()}) == 4
+    assert all(row["link"] == ranged.link for row in rows.values())
+    assert not rows[3]["is_current"]
+    assert rows[3]["status_reason"] == "available"
+    assert rows[4]["is_current"]
+    assert rows[4]["needed_episodes"] == [2]
+    assert not rows[5]["is_current"]
+    assert rows[5]["status_reason"] == "played"
+    assert rows[6]["is_current"]
+    assert rows[6]["jellyfin_expected_episode_count"] is None
+    assert jellyfin.series_calls == [series.id]
+
+    html = cfg.output_path.read_text(encoding="utf-8")
+    current_html, history_html = html.split('<details class="history">', 1)
+    assert "The Walking Dead: Dead City · S04" in current_html
+    assert "The Walking Dead: Dead City · S06" in current_html
+    assert "The Walking Dead: Dead City · S03" not in current_html
+    assert "The Walking Dead: Dead City · S05" not in current_html
+    for season in range(3, 7):
+        assert f"The Walking Dead: Dead City · S{season:02d}" in history_html
+
+
+def test_changed_season_range_removes_obsolete_derived_entries(tmp_path) -> None:
+    cfg, storage, renderer = setup(tmp_path)
+    series = Series("dead-city", "The Walking Dead: Dead City", imdb_id="tt18546730")
+    library = Library([series], missing_episode_tracking_enabled=True)
+    expected = {
+        (series.id, season): {1, 2}
+        for season in range(3, 7)
+    }
+    scanner = Scanner(
+        cfg,
+        storage,
+        renderer,
+        Jellyfin(library, expected),
+        Feeds([release("The.Walking.Dead.Dead.City.S03-S06.Complete.German")]),
+    )
+
+    assert scanner.run()
+    assert {row["season"] for row in storage.announcements()} == {3, 4, 5, 6}
+    assert scanner.run()
+    assert len(storage.announcements()) == 4
+
+    scanner.feeds = Feeds(
+        [release("The.Walking.Dead.Dead.City.S03-S05.Complete.German")]
+    )
+    assert scanner.run()
+    assert {row["season"] for row in storage.announcements()} == {3, 4, 5}
+
+
+def test_range_quality_variants_are_grouped_once_per_season(tmp_path) -> None:
+    cfg, storage, renderer = setup(tmp_path)
+    series = Series("dead-city", "The Walking Dead: Dead City", imdb_id="tt18546730")
+    library = Library([series], missing_episode_tracking_enabled=True)
+    expected = {
+        (series.id, 3): {1},
+        (series.id, 4): {1},
+    }
+    first = release("The.Walking.Dead.Dead.City.S03-S04.German.720p-WAYNE")
+    second = replace(
+        first,
+        guid="post-2",
+        link="https://feed.test/post-2",
+        title="The.Walking.Dead.Dead.City.S03-S04.German.1080p-WvF",
+    )
+    scanner = Scanner(
+        cfg,
+        storage,
+        renderer,
+        Jellyfin(library, expected),
+        Feeds([first, second]),
+    )
+
+    assert scanner.run()
+    assert len(storage.announcements()) == 4
+    html = cfg.output_path.read_text(encoding="utf-8")
+    current_html = html.split('<details class="history">', 1)[0]
+    assert current_html.count('data-label="Release"') == 2
+    for season in (3, 4):
+        assert f"The Walking Dead: Dead City · S{season:02d}" in current_html
+    assert current_html.count(">720p</a>") == 2
+    assert current_html.count(">1080p</a>") == 2
+
+
 def test_unknown_season_inventory_stays_current(tmp_path) -> None:
     cfg, storage, renderer = setup(tmp_path)
     series = Series("dead-city", "The Walking Dead: Dead City", imdb_id="tt18546730")
