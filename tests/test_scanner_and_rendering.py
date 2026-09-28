@@ -77,6 +77,11 @@ def setup(tmp_path):
     return cfg, storage, renderer
 
 
+def release_views(html: str) -> tuple[str, str]:
+    content = html.split('<section class="view" id="overview"', 1)[1]
+    return content.split('<section class="view" id="history"', 1)
+
+
 def test_season_release_is_current_until_all_expected_episodes_exist(tmp_path) -> None:
     cfg, storage, renderer = setup(tmp_path)
     series = Series("dead-city", "The Walking Dead: Dead City", imdb_id="tt18546730")
@@ -166,7 +171,7 @@ def test_season_range_creates_independent_entries_and_statuses(tmp_path) -> None
     assert jellyfin.series_calls == [series.id]
 
     html = cfg.output_path.read_text(encoding="utf-8")
-    current_html, history_html = html.split('<details class="history">', 1)
+    current_html, history_html = release_views(html)
     assert "The Walking Dead: Dead City · S04" in current_html
     assert "The Walking Dead: Dead City · S06" in current_html
     assert "The Walking Dead: Dead City · S03" not in current_html
@@ -229,7 +234,7 @@ def test_range_quality_variants_are_grouped_once_per_season(tmp_path) -> None:
     assert scanner.run()
     assert len(storage.announcements()) == 4
     html = cfg.output_path.read_text(encoding="utf-8")
-    current_html = html.split('<details class="history">', 1)[0]
+    current_html, _ = release_views(html)
     assert current_html.count('data-label="Release"') == 2
     for season in (3, 4):
         assert f"The Walking Dead: Dead City · S{season:02d}" in current_html
@@ -317,7 +322,7 @@ def test_release_variants_stay_stored_but_are_grouped_in_current_view(
     assert len(storage.announcements()) == 2
     assert jellyfin.series_calls == [series.id]
     html = cfg.output_path.read_text(encoding="utf-8")
-    current_html, history_html = html.split('<details class="history">', 1)
+    current_html, history_html = release_views(html)
     assert current_html.count('data-label="Release"') == 1
     assert "1 Einträge" in current_html
     assert f">The Walking Dead: Dead City · {marker}</span>" in current_html
@@ -444,7 +449,10 @@ def test_html_is_escaped_and_keeps_reduced_columns(tmp_path) -> None:
     assert "<script>alert(1)</script>" not in html
     assert "Aktuell fehlend" in html
     assert "Historie" in html
-    assert '<details class="history">' in html
+    assert '<section class="view" id="history"' in html
+    assert '<section class="view" id="media-import"' in html
+    assert 'href="#history"' in html
+    assert 'href="#media-import"' in html
     assert '<html lang="de-CH">' in html
     assert 'rel="icon"' in html
     assert 'href="/favicon.svg"' in html
