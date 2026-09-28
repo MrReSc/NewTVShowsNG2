@@ -134,11 +134,10 @@ class MediaImporter:
                         continue
             stable_at = first_seen + timedelta(hours=self.config.import_stable_hours)
             if changed or now < stable_at:
-                remaining = max(0, round((stable_at - now).total_seconds() / 60))
                 self.storage.update_media_import(
                     relative,
                     "waiting",
-                    f"Wartezeit läuft noch ({remaining} Minuten)",
+                    "Wartet auf Stabilitätsfrist",
                 )
                 waiting += 1
                 continue

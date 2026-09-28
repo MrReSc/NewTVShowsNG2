@@ -207,7 +207,7 @@
                       {% elif item.status == 'blocked' %}<span class="badge blocked">Blockiert</span>
                       {% else %}<span class="badge warning">Wartet</span>{% endif %}
                     </td>
-                    <td class="date-col" data-label="Details">{{ item.reason }}</td>
+                    <td class="date-col" data-label="Details">{% if item.status == 'waiting' %}Wartet auf Stabilitätsfrist{% else %}{{ item.reason }}{% endif %}</td>
                   </tr>
                 {% endfor %}
               </tbody>
