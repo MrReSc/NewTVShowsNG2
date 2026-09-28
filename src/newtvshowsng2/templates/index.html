@@ -70,10 +70,13 @@
     .alert { margin: 0 0 18px; padding: 13px 16px; border: 1px solid #735b32; border-radius: 11px; background: var(--warning-soft); color: #f5dfb7; }
     .alert.error { border-color: #784641; background: var(--danger-soft); color: #f5c4c0; }
     .alert strong { display: block; margin-bottom: 2px; }
-    .view { display: none; scroll-margin-top: 82px; }
-    #overview { display: block; }
-    body:has(.view:target) #overview { display: none; }
-    .view:target { display: block; }
+    .tab-anchor { position: fixed; top: 0; left: 0; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+    .view { display: none; }
+    #overview-view { display: block; }
+    body:has(#history:target) #overview-view,
+    body:has(#media-import:target) #overview-view { display: none; }
+    body:has(#history:target) #history-view,
+    body:has(#media-import:target) #media-import-view { display: block; }
     .section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
     .section-heading h1 { margin: 0; font: 400 1.25rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: -.03em; }
     .section-note { margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
@@ -157,6 +160,9 @@
       <a href="#media-import">Medienimport</a>
       <a href="/log">Log</a>
     </nav>
+    <span class="tab-anchor" id="overview" aria-hidden="true"></span>
+    <span class="tab-anchor" id="history" aria-hidden="true"></span>
+    <span class="tab-anchor" id="media-import" aria-hidden="true"></span>
 
     {% if state.get('last_error') %}
       <div class="alert error" role="alert">
@@ -172,7 +178,7 @@
       </div>
     {% endif %}
 
-    <section class="view" id="media-import" aria-labelledby="media-import-title">
+    <section class="view" id="media-import-view" aria-labelledby="media-import-title">
       <div class="section-heading">
         <div>
           <h1 id="media-import-title">Medienimport</h1>
@@ -272,7 +278,7 @@
       {% endif %}
     {% endmacro %}
 
-    <section class="view" id="overview" aria-labelledby="current-title">
+    <section class="view" id="overview-view" aria-labelledby="current-title">
       <div class="section-heading">
         <div>
           <h1 id="current-title">Aktuell fehlend</h1>
@@ -283,7 +289,7 @@
       <div class="panel current">{{ release_table(current, true) }}</div>
     </section>
 
-    <section class="view" id="history" aria-labelledby="history-title">
+    <section class="view" id="history-view" aria-labelledby="history-title">
       <div class="section-heading">
         <div>
           <h1 id="history-title">Historie</h1>

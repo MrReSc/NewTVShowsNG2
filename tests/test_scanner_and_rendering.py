@@ -78,8 +78,8 @@ def setup(tmp_path):
 
 
 def release_views(html: str) -> tuple[str, str]:
-    content = html.split('<section class="view" id="overview"', 1)[1]
-    return content.split('<section class="view" id="history"', 1)
+    content = html.split('<section class="view" id="overview-view"', 1)[1]
+    return content.split('<section class="view" id="history-view"', 1)
 
 
 def test_season_release_is_current_until_all_expected_episodes_exist(tmp_path) -> None:
@@ -449,8 +449,8 @@ def test_html_is_escaped_and_keeps_reduced_columns(tmp_path) -> None:
     assert "<script>alert(1)</script>" not in html
     assert "Aktuell fehlend" in html
     assert "Historie" in html
-    assert '<section class="view" id="history"' in html
-    assert '<section class="view" id="media-import"' in html
+    assert '<section class="view" id="history-view"' in html
+    assert '<section class="view" id="media-import-view"' in html
     assert 'href="#history"' in html
     assert 'href="#media-import"' in html
     assert '<html lang="de-CH">' in html
