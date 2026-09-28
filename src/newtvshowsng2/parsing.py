@@ -11,7 +11,8 @@ from typing import Any
 from .models import FeedRelease, ParsedRelease
 
 RELEASE_MARKER = re.compile(
-    r"(?<![A-Za-z0-9])S(?P<season>\d{1,3})(?:E(?P<episode>\d{1,3}))?(?!\d)",
+    r"(?<![A-Za-z0-9])S(?P<season>\d{1,3})"
+    r"(?:[.\s_-]*E(?P<episode>\d{1,3}))?(?!\d)",
     re.IGNORECASE,
 )
 SEASON_RANGE = re.compile(
@@ -69,8 +70,12 @@ def parse_release(title: str, content: str = "") -> ParsedRelease | None:
     year = None
     year_match = TRAILING_YEAR.search(normalized)
     if year_match:
-        year = int(year_match.group(1))
-        normalized = normalized[: year_match.start(1)].strip()
+        title_without_year = normalized[: year_match.start(1)].strip()
+        # Numeric show names such as "1899" and "1923" are titles, not years.
+        possible_year = int(year_match.group(1))
+        if title_without_year and possible_year >= 1950:
+            year = possible_year
+            normalized = title_without_year
 
     imdb_match = IMDB_ID.search(content)
     return ParsedRelease(

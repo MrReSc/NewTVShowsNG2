@@ -21,11 +21,26 @@ services:
       MAX_HISTORY: ${MAX_HISTORY:-300}
       TZ: ${TZ:-Europe/Zurich}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MEDIA_IMPORT_ENABLED: ${MEDIA_IMPORT_ENABLED:-true}
+      INCOME_DIR: /income
+      SHOWS_DIR: /shows
+      JELLYFIN_SHOWS_PATH: ${JELLYFIN_SHOWS_PATH:-/data/tvshows}
+      IMPORT_STABLE_HOURS: ${IMPORT_STABLE_HOURS:-1}
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
     volumes:
       - ./data:/data
       - ./out:/out
+      - type: bind
+        source: ${INCOME_HOST_PATH:?INCOME_HOST_PATH muss gesetzt sein}
+        target: /income
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SHOWS_HOST_PATH:?SHOWS_HOST_PATH muss gesetzt sein}
+        target: /shows
+        bind:
+          create_host_path: false
 ```
 
 ## `.env`
@@ -39,6 +54,18 @@ CHECK_INTERVAL_HOURS=1
 MAX_HISTORY=300
 TZ=Europe/Zurich
 LOG_LEVEL=INFO
+MEDIA_IMPORT_ENABLED=true
+INCOME_HOST_PATH=/volume1/Media/Serien/Income
+SHOWS_HOST_PATH=/volume1/Media/Serien/Watched
+JELLYFIN_SHOWS_PATH=/data/tvshows
+IMPORT_STABLE_HOURS=1
 PUID=1000
 PGID=1000
 ```
+
+`JELLYFIN_SHOWS_PATH` ist der Pfad desselben `Watched`-Ordners aus Sicht des
+Jellyfin-Containers. Die Anwendung vergleicht ihn vor jedem Import mit den von
+Jellyfin gemeldeten TV-Bibliothekspfaden. Dateien werden erst übernommen, wenn
+sie eine Stunde unverändert in `Income` lagen. Nicht eindeutige Zuordnungen und
+bereits vorhandene Episoden bleiben in `Income` und werden in der Weboberfläche
+angezeigt.

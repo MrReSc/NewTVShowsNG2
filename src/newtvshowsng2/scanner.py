@@ -8,6 +8,7 @@ from .config import Config
 from .feeds import FeedClient, FeedError
 from .jellyfin import JellyfinClient, JellyfinError
 from .matching import match_release
+from .media_importer import MediaImporter
 from .models import SeasonInventory
 from .parsing import parse_release
 from .rendering import Renderer
@@ -24,6 +25,7 @@ class Scanner:
         renderer: Renderer,
         jellyfin: JellyfinClient | None = None,
         feeds: FeedClient | None = None,
+        importer: MediaImporter | None = None,
     ) -> None:
         self.config = config
         self.storage = storage
@@ -35,6 +37,9 @@ class Scanner:
             config.request_timeout,
         )
         self.feeds = feeds or FeedClient(config.request_timeout)
+        self.importer = importer
+        if self.importer is None and config.media_import_enabled:
+            self.importer = MediaImporter(config, storage, self.jellyfin)
         self._lock = threading.Lock()
 
     def run(self) -> bool:
@@ -48,6 +53,15 @@ class Scanner:
         try:
             library = self.jellyfin.load_library()
             scan_warnings: list[str] = []
+            if self.importer is not None:
+                import_result = self.importer.run(library, started_at)
+                scan_warnings.extend(import_result.warnings)
+                LOGGER.info(
+                    "Medienimport: %d übernommen, %d blockiert, %d wartend",
+                    import_result.transferred,
+                    import_result.blocked,
+                    import_result.waiting,
+                )
             season_cache: set[tuple[str, int]] = set()
             series_cache: dict[str, dict[int, SeasonInventory] | None] = {}
             missing_metadata_warning_logged = False

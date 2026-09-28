@@ -16,8 +16,23 @@ services:
       MAX_HISTORY: ${MAX_HISTORY:-300}
       TZ: ${TZ:-Europe/Zurich}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MEDIA_IMPORT_ENABLED: ${MEDIA_IMPORT_ENABLED:-true}
+      INCOME_DIR: /income
+      SHOWS_DIR: /shows
+      JELLYFIN_SHOWS_PATH: ${JELLYFIN_SHOWS_PATH:-/data/tvshows}
+      IMPORT_STABLE_HOURS: ${IMPORT_STABLE_HOURS:-1}
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
     volumes:
       - ./data:/data
       - ./out:/out
+      - type: bind
+        source: ${INCOME_HOST_PATH:?INCOME_HOST_PATH muss gesetzt sein}
+        target: /income
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SHOWS_HOST_PATH:?SHOWS_HOST_PATH muss gesetzt sein}
+        target: /shows
+        bind:
+          create_host_path: false

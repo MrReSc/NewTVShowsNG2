@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,11 @@ class Config:
     data_dir: Path = Path("/data")
     output_dir: Path = Path("/out")
     request_timeout: float = 20.0
+    income_dir: Path = Path("/income")
+    shows_dir: Path = Path("/shows")
+    jellyfin_shows_path: str = "/data/tvshows"
+    import_stable_hours: float = 1.0
+    media_import_enabled: bool = False
 
     @property
     def database_path(self) -> Path:
@@ -79,6 +85,13 @@ class Config:
             data_dir=Path(os.getenv("DATA_DIR", "/data")),
             output_dir=Path(os.getenv("OUTPUT_DIR", "/out")),
             request_timeout=_positive_float("REQUEST_TIMEOUT_SECONDS", 20.0),
+            income_dir=Path(os.getenv("INCOME_DIR", "/income")),
+            shows_dir=Path(os.getenv("SHOWS_DIR", "/shows")),
+            jellyfin_shows_path=os.getenv(
+                "JELLYFIN_SHOWS_PATH", "/data/tvshows"
+            ).strip(),
+            import_stable_hours=_positive_float("IMPORT_STABLE_HOURS", 1.0),
+            media_import_enabled=_boolean("MEDIA_IMPORT_ENABLED", True),
         )
 
 
@@ -106,6 +119,15 @@ def _positive_float(name: str, default: float) -> float:
         value = float(raw)
     except ValueError as exc:
         raise ValueError(f"{name} muss eine Zahl sein") from exc
-    if value <= 0:
-        raise ValueError(f"{name} muss grösser als 0 sein")
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{name} muss eine endliche Zahl grösser als 0 sein")
     return value
+
+
+def _boolean(name: str, default: bool) -> bool:
+    raw = os.getenv(name, "true" if default else "false").strip().casefold()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} muss true oder false sein")

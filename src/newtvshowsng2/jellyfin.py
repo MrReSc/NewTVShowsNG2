@@ -6,7 +6,7 @@ from typing import Any
 import requests
 
 from . import __version__
-from .models import Library, SeasonInventory, Series
+from .models import Library, RemoteSeries, SeasonInventory, Series
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class JellyfinClient:
             {
                 "includeItemTypes": "Series",
                 "recursive": "true",
-                "fields": "OriginalTitle,ProviderIds",
+                "fields": "OriginalTitle,ProviderIds,Path",
                 "enableImages": "false",
                 "enableUserData": "false",
             }
@@ -99,6 +99,56 @@ class JellyfinClient:
             len(library.episodes),
         )
         return library
+
+    def tv_library_locations(self) -> tuple[str, ...]:
+        folders = self._get_payload("/Library/VirtualFolders")
+        if not isinstance(folders, list):
+            raise JellyfinError("Jellyfin /Library/VirtualFolders lieferte keine gültige Liste")
+        locations: list[str] = []
+        for folder in folders:
+            if not isinstance(folder, dict) or str(
+                _field(folder, "CollectionType") or ""
+            ).casefold() not in {"tvshows", "tv"}:
+                continue
+            values = _field(folder, "Locations") or []
+            if isinstance(values, list):
+                locations.extend(str(value) for value in values if value)
+        return tuple(dict.fromkeys(locations))
+
+    def search_series(
+        self, name: str, year: int | None = None, imdb_id: str | None = None
+    ) -> list[RemoteSeries]:
+        search_info: dict[str, Any] = {
+            "Name": name,
+            "MetadataLanguage": "de",
+            "IsAutomated": True,
+        }
+        if year is not None:
+            search_info["Year"] = year
+        if imdb_id:
+            search_info["ProviderIds"] = {"Imdb": imdb_id}
+        payload = self._post_payload(
+            "/Items/RemoteSearch/Series",
+            {"SearchInfo": search_info, "IncludeDisabledProviders": False},
+        )
+        if not isinstance(payload, list):
+            raise JellyfinError("Jellyfin-Seriensuche lieferte keine gültige Liste")
+        results: list[RemoteSeries] = []
+        for item in payload:
+            if not isinstance(item, dict) or not _field(item, "Name"):
+                continue
+            provider_ids = _provider_ids(_field(item, "ProviderIds"))
+            results.append(
+                RemoteSeries(
+                    name=str(_field(item, "Name")),
+                    production_year=_as_int(_field(item, "ProductionYear")),
+                    provider_ids=provider_ids,
+                )
+            )
+        return results
+
+    def refresh_library(self) -> None:
+        self._post_payload("/Library/Refresh")
 
     def _resolve_user(self) -> str:
         if not self.username:
@@ -252,23 +302,31 @@ class JellyfinClient:
             raise JellyfinError(f"Jellyfin-Anfrage {path} lieferte kein JSON-Objekt")
         return payload
 
+    def _post_payload(self, path: str, payload: Any | None = None) -> Any:
+        try:
+            response = self.session.post(
+                f"{self.base_url}{path}", json=payload, timeout=self.timeout
+            )
+            response.raise_for_status()
+            if not getattr(response, "content", b""):
+                return None
+            return response.json()
+        except (requests.RequestException, ValueError) as exc:
+            raise JellyfinError(
+                f"Jellyfin-Anfrage {path} fehlgeschlagen: {exc}"
+            ) from exc
+
     @staticmethod
     def _to_series(item: dict[str, Any]) -> Series | None:
         series_id = _field(item, "Id")
         name = _field(item, "Name")
         if not series_id or not name:
             return None
-        provider_ids = _field(item, "ProviderIds") or {}
-        imdb_id = None
-        if isinstance(provider_ids, dict):
-            imdb_id = next(
-                (
-                    str(value).lower()
-                    for key, value in provider_ids.items()
-                    if key.casefold() == "imdb" and value
-                ),
-                None,
-            )
+        provider_ids = _provider_ids(_field(item, "ProviderIds"))
+        imdb_id = next(
+            (value.lower() for key, value in provider_ids if key.casefold() == "imdb"),
+            None,
+        )
         return Series(
             id=str(series_id),
             name=str(name),
@@ -279,6 +337,8 @@ class JellyfinClient:
             ),
             production_year=_as_int(_field(item, "ProductionYear")),
             imdb_id=imdb_id,
+            path=str(_field(item, "Path")) if _field(item, "Path") else None,
+            provider_ids=provider_ids,
         )
 
 
@@ -292,6 +352,18 @@ def _as_int(value: Any) -> int | None:
         return int(value) if value is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _provider_ids(value: Any) -> tuple[tuple[str, str], ...]:
+    if not isinstance(value, dict):
+        return ()
+    return tuple(
+        sorted(
+            (str(key), str(provider_id))
+            for key, provider_id in value.items()
+            if key and provider_id
+        )
+    )
 
 
 def _library_imports_missing_episodes(folder: dict[str, Any]) -> bool:

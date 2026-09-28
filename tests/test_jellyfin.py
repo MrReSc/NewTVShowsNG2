@@ -1,5 +1,6 @@
 import pytest
 import requests
+import json
 
 from newtvshowsng2.jellyfin import JellyfinClient, JellyfinError
 
@@ -8,6 +9,7 @@ class Response:
     def __init__(self, payload, status=200):
         self.payload = payload
         self.status_code = status
+        self.content = json.dumps(payload).encode() if payload is not None else b""
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -46,6 +48,7 @@ class Session:
                 "UserData": {"Played": False},
             },
         ]
+        self.post_calls = []
 
     def get(self, url, params=None, timeout=None):
         self.calls.append((url, params, timeout))
@@ -58,6 +61,7 @@ class Session:
                 [
                     {
                         "CollectionType": "tvshows",
+                        "Locations": ["/media/tv"],
                         "LibraryOptions": {
                             "TypeOptions": [
                                 {
@@ -90,6 +94,7 @@ class Session:
                             "OriginalTitle": "The Walking Dead: Dead City",
                             "ProductionYear": 2023,
                             "ProviderIds": {"Imdb": "tt18546730"},
+                            "Path": "/media/tv/The Walking Dead Dead City (2023)",
                         }
                     ],
                     "TotalRecordCount": 1,
@@ -109,6 +114,20 @@ class Session:
             }
         )
 
+    def post(self, url, json=None, timeout=None):
+        self.post_calls.append((url, json, timeout))
+        if url.endswith("/Items/RemoteSearch/Series"):
+            return Response(
+                [
+                    {
+                        "Name": "Neue Serie",
+                        "ProductionYear": 2026,
+                        "ProviderIds": {"Tvdb": "1234"},
+                    }
+                ]
+            )
+        return Response(None)
+
 
 def test_loads_jellyfin_12_with_modern_authorization() -> None:
     session = Session()
@@ -119,6 +138,7 @@ def test_loads_jellyfin_12_with_modern_authorization() -> None:
     library = client.load_library()
 
     assert library.series[0].imdb_id == "tt18546730"
+    assert library.series[0].path == "/media/tv/The Walking Dead Dead City (2023)"
     assert library.episode_in_season("series-1", 3) == 7
     assert library.missing_episode_tracking_enabled
     assert session.headers["Authorization"].startswith("MediaBrowser ")
@@ -132,6 +152,21 @@ def test_loads_jellyfin_12_with_modern_authorization() -> None:
     )
     assert episode_params["isMissing"] == "false"
     assert episode_params["locationTypes"] == "FileSystem"
+
+
+def test_library_paths_remote_search_and_refresh() -> None:
+    session = Session()
+    client = JellyfinClient("http://jellyfin.test", "secret", "Hans", session=session)
+
+    assert client.tv_library_locations() == ("/media/tv",)
+    results = client.search_series("Neue Serie", 2026)
+    client.refresh_library()
+
+    assert results[0].name == "Neue Serie"
+    assert results[0].provider_ids == (("Tvdb", "1234"),)
+    assert session.post_calls[0][0].endswith("/Items/RemoteSearch/Series")
+    assert session.post_calls[0][1]["SearchInfo"]["Year"] == 2026
+    assert session.post_calls[1][0].endswith("/Library/Refresh")
 
 
 def test_loads_complete_season_inventory_and_combined_episodes() -> None:

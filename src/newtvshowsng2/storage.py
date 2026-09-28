@@ -47,6 +47,21 @@ CREATE TABLE IF NOT EXISTS app_state (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS media_imports (
+    source_path TEXT PRIMARY KEY,
+    signature TEXT NOT NULL,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    parsed_title TEXT,
+    season INTEGER,
+    episode INTEGER,
+    target_path TEXT,
+    transferred_at TEXT
+);
+CREATE INDEX IF NOT EXISTS media_imports_last_seen
+    ON media_imports(last_seen_at DESC);
 """
 
 
@@ -307,6 +322,121 @@ class Storage:
                 row["key"]: row["value"]
                 for row in connection.execute("SELECT key, value FROM app_state")
             }
+
+    def observe_media_import(
+        self, source_path: str, signature: str, seen_at: datetime
+    ) -> tuple[datetime, bool, str]:
+        """Record a source and return stable-since time, change flag and status."""
+        now = _iso(seen_at)
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT signature, first_seen_at, status FROM media_imports WHERE source_path = ?",
+                (source_path,),
+            ).fetchone()
+            changed = row is None or str(row["signature"]) != signature
+            first_seen = seen_at if changed else datetime.fromisoformat(row["first_seen_at"])
+            if changed:
+                connection.execute(
+                    """
+                    INSERT INTO media_imports (
+                        source_path, signature, first_seen_at, last_seen_at, status, reason,
+                        parsed_title, season, episode, target_path, transferred_at
+                    ) VALUES (?, ?, ?, ?, 'waiting', '', NULL, NULL, NULL, NULL, NULL)
+                    ON CONFLICT(source_path) DO UPDATE SET
+                        signature = excluded.signature,
+                        first_seen_at = excluded.first_seen_at,
+                        last_seen_at = excluded.last_seen_at,
+                        status = 'waiting', reason = '', parsed_title = NULL,
+                        season = NULL, episode = NULL, target_path = NULL,
+                        transferred_at = NULL
+                    """,
+                    (source_path, signature, now, now),
+                )
+            else:
+                connection.execute(
+                    "UPDATE media_imports SET last_seen_at = ? WHERE source_path = ?",
+                    (now, source_path),
+                )
+        status = "waiting" if changed else str(row["status"])
+        return first_seen, changed, status
+
+    def update_media_import(
+        self,
+        source_path: str,
+        status: str,
+        reason: str,
+        *,
+        parsed_title: str | None = None,
+        season: int | None = None,
+        episode: int | None = None,
+        target_path: str | None = None,
+        transferred_at: datetime | None = None,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE media_imports SET status = ?, reason = ?, parsed_title = ?,
+                    season = ?, episode = ?, target_path = ?, transferred_at = ?
+                WHERE source_path = ?
+                """,
+                (
+                    status,
+                    reason,
+                    parsed_title,
+                    season,
+                    episode,
+                    target_path,
+                    _iso(transferred_at) if transferred_at else None,
+                    source_path,
+                ),
+            )
+
+    def media_imports(self, limit: int = 300) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            return [
+                dict(row)
+                for row in connection.execute(
+                    """
+                    SELECT * FROM media_imports
+                    ORDER BY COALESCE(transferred_at, last_seen_at) DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+            ]
+
+    def media_import_target(self, source_path: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT target_path FROM media_imports WHERE source_path = ?",
+                (source_path,),
+            ).fetchone()
+        if row is None or row["target_path"] is None:
+            return None
+        return str(row["target_path"])
+
+    def forget_unseen_media_imports(self, seen_paths: set[str]) -> None:
+        with self._connect() as connection:
+            if seen_paths:
+                placeholders = ", ".join("?" for _ in seen_paths)
+                connection.execute(
+                    f"DELETE FROM media_imports WHERE status != 'transferred' "
+                    f"AND source_path NOT IN ({placeholders})",
+                    tuple(sorted(seen_paths)),
+                )
+            else:
+                connection.execute(
+                    "DELETE FROM media_imports WHERE status != 'transferred'"
+                )
+
+    def library_refresh_pending(self) -> bool:
+        return self.state().get("library_refresh_pending") == "1"
+
+    def set_library_refresh_pending(self, pending: bool) -> None:
+        with self._connect() as connection:
+            self._set_many(
+                connection, {"library_refresh_pending": "1" if pending else "0"}
+            )
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:

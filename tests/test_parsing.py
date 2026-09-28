@@ -32,6 +32,31 @@ def test_parse_episode_and_year() -> None:
     assert parsed.episode == 123
 
 
+@pytest.mark.parametrize("title", ["1899.S01E01", "1923.S02E03"])
+def test_numeric_show_name_is_not_treated_as_year(title) -> None:
+    parsed = parse_release(title)
+
+    assert parsed is not None
+    assert parsed.normalized_title == title.split(".", 1)[0]
+    assert parsed.year is None
+
+
+def test_historical_year_can_be_part_of_show_title() -> None:
+    parsed = parse_release("Davos.1917.S01E01")
+
+    assert parsed is not None
+    assert parsed.normalized_title == "davos 1917"
+    assert parsed.year is None
+
+
+@pytest.mark.parametrize("marker", ["S05.E01", "S05 E01", "S05_E01", "S05-E01"])
+def test_parse_episode_with_separator(marker) -> None:
+    parsed = parse_release(f"The.Walking.Dead.{marker}.German")
+    assert parsed is not None
+    assert parsed.season == 5
+    assert parsed.episode == 1
+
+
 def test_parse_complete_and_german_characters() -> None:
     parsed = parse_release(
         "Storage.Wars.-.Die.Geschaeftemacher.S01.COMPLETE.GERMAN.DOKU"

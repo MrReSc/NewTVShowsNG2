@@ -54,6 +54,15 @@ def test_imdb_id_wins() -> None:
     assert match.method == "IMDb-ID"
 
 
+def test_imdb_id_matching_is_case_insensitive() -> None:
+    items = [Series("one", "Some Show", imdb_id="TT18546730")]
+
+    match = match_release(parsed("Wrong.Title.S01E01", "tt18546730"), items)
+
+    assert match is not None
+    assert match.series.id == "one"
+
+
 def test_conflicting_imdb_id_prevents_title_fallback() -> None:
     match = match_release(
         parsed("The.Walking.Dead.S03", "image tt9999999-SHD.jpg"), SERIES
@@ -72,3 +81,21 @@ def test_original_title_is_used() -> None:
 
     assert match is not None
     assert match.method == "Originaltitel"
+
+
+def test_explicit_conflicting_year_is_unsafe() -> None:
+    items = [Series("new", "Doctor Who", production_year=2023)]
+    match = match_release(parsed("Doctor.Who.2005.S01E01"), items)
+
+    assert match is not None
+    assert match.warning
+
+
+def test_year_can_be_part_of_the_actual_show_title() -> None:
+    items = [Series("davos", "Davos 1917", production_year=2023)]
+    match = match_release(parsed("Davos.1917.S01E01"), items)
+
+    assert match is not None
+    assert match.series.id == "davos"
+    assert match.method == "Titel"
+    assert not match.warning

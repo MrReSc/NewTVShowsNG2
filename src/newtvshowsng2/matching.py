@@ -12,7 +12,12 @@ def match_release(
     series = list(series_items)
 
     if release.imdb_id:
-        id_matches = [item for item in series if item.imdb_id == release.imdb_id]
+        id_matches = [
+            item
+            for item in series
+            if item.imdb_id
+            and item.imdb_id.casefold() == release.imdb_id.casefold()
+        ]
         if id_matches:
             return Match(
                 _select_by_year(id_matches, release.year),
@@ -39,6 +44,15 @@ def match_release(
         selected = _select_by_year(name_exact, release.year)
         return Match(selected, "Titel", _is_ambiguous(name_exact, release.year))
 
+    full_title = normalize_title(release.series_title)
+    if full_title != release.normalized_title:
+        full_name_exact = [
+            item for item in candidates if normalize_title(item.name) == full_title
+        ]
+        if full_name_exact:
+            selected = min(full_name_exact, key=lambda item: item.id)
+            return Match(selected, "Vollständiger Titel", len(full_name_exact) > 1)
+
     original_exact = [
         item
         for item in candidates
@@ -50,6 +64,21 @@ def match_release(
         return Match(
             selected, "Originaltitel", _is_ambiguous(original_exact, release.year)
         )
+
+    if full_title != release.normalized_title:
+        full_original_exact = [
+            item
+            for item in candidates
+            if item.original_title
+            and normalize_title(item.original_title) == full_title
+        ]
+        if full_original_exact:
+            selected = min(full_original_exact, key=lambda item: item.id)
+            return Match(
+                selected,
+                "Vollständiger Originaltitel",
+                len(full_original_exact) > 1,
+            )
 
     fuzzy: list[tuple[int, Series]] = []
     for item in candidates:
@@ -120,11 +149,9 @@ def _select_by_year(items: list[Series], year: int | None) -> Series:
 
 
 def _is_ambiguous(items: list[Series], year: int | None) -> bool:
-    if len(items) <= 1:
-        return False
-    return not (
-        year is not None and sum(item.production_year == year for item in items) == 1
-    )
+    if year is None:
+        return len(items) > 1
+    return sum(item.production_year == year for item in items) != 1
 
 
 def _year_distance(item: Series, year: int | None) -> int:

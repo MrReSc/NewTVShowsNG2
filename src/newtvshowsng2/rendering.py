@@ -57,11 +57,13 @@ class Renderer:
             self.storage.announcements(current_only=True)
         )
         history = self.storage.announcements()
+        media_imports = self.storage.media_imports()
         state = self.storage.state()
 
         html = self.environment.get_template("index.html").render(
             current=current,
             history=history,
+            media_imports=media_imports,
             state=state,
             generated_at=datetime.now(UTC),
         )

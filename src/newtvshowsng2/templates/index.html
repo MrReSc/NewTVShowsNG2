@@ -106,6 +106,8 @@
     .badge.new { border-color: #4768c1; background: var(--primary-soft); color: #b9c9ff; }
     .badge.open, .badge.warning { border-color: #896626; background: var(--warning-soft); color: #ffdfa0; }
     .badge.done { border-color: #23634f; background: var(--success-soft); color: #a9f0d1; }
+    .badge.blocked { border-color: #8b3540; background: var(--danger-soft); color: #ffd1d6; }
+    .import-target { display: block; margin-top: 3px; color: var(--muted); font-size: .78rem; font-weight: 400; }
     .empty { padding: 38px 20px; text-align: center; }
     .empty strong { display: block; margin-bottom: 4px; }
     .empty span { color: var(--muted); }
@@ -169,6 +171,54 @@
         {{ state.get('last_error') }} Die zuletzt gespeicherten Ergebnisse bleiben sichtbar.
       </div>
     {% endif %}
+
+    {% if state.get('library_refresh_pending') == '1' %}
+      <div class="alert" role="status">
+        <strong>Jellyfin-Bibliotheksscan ausstehend</strong>
+        Vor weiteren Dateiübernahmen wird der Scan erneut angefordert.
+      </div>
+    {% endif %}
+
+    <details class="history" {% if media_imports and media_imports[0].status != 'transferred' %}open{% endif %}>
+      <summary>
+        <div>
+          <h1>Medienimport</h1>
+          <p class="section-note">Dateien aus Income, ihre Zuordnung und das vorgesehene Ziel.</p>
+        </div>
+        <span class="count">{{ media_imports | length }} Einträge</span>
+      </summary>
+      <div class="panel">
+        {% if media_imports %}
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th class="release">Quelle</th><th class="inventory">Episode</th><th class="status-col">Status</th><th class="date-col">Details</th></tr></thead>
+              <tbody>
+                {% for item in media_imports %}
+                  <tr>
+                    <td class="release" data-label="Quelle">
+                      {{ item.source_path }}
+                      {% if item.target_path %}<small class="import-target">→ {{ item.target_path }}</small>{% endif %}
+                    </td>
+                    <td class="inventory" data-label="Episode">
+                      {% if item.season is not none and item.episode is not none %}S{{ "%02d" | format(item.season) }}E{{ "%02d" | format(item.episode) }}{% else %}–{% endif %}
+                      {% if item.parsed_title %}<small>{{ item.parsed_title }}</small>{% endif %}
+                    </td>
+                    <td class="status-col" data-label="Status">
+                      {% if item.status == 'transferred' %}<span class="badge done">Übernommen</span>
+                      {% elif item.status == 'blocked' %}<span class="badge blocked">Blockiert</span>
+                      {% else %}<span class="badge warning">Wartet</span>{% endif %}
+                    </td>
+                    <td class="date-col" data-label="Details">{{ item.reason }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty"><strong>Keine Dateien erkannt</strong><span>Income ist leer oder der erste Scan steht noch aus.</span></div>
+        {% endif %}
+      </div>
+    </details>
 
     {% macro release_table(rows, current_panel=false) %}
       {% if rows %}
@@ -251,7 +301,7 @@
       <div class="panel">{{ release_table(history) }}</div>
     </details>
 
-    <footer>Erzeugt am {{ generated_at | local_datetime }} · Jellyfin wird ausschliesslich lesend abgefragt.</footer>
+    <footer>Erzeugt am {{ generated_at | local_datetime }}</footer>
   </main>
 </body>
 </html>

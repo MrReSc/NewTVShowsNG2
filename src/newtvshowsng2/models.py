@@ -11,6 +11,15 @@ class Series:
     original_title: str | None = None
     production_year: int | None = None
     imdb_id: str | None = None
+    path: str | None = None
+    provider_ids: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteSeries:
+    name: str
+    production_year: int | None
+    provider_ids: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True, slots=True)
