@@ -494,6 +494,16 @@ class Storage:
         with self._connect() as connection:
             self._set_many(connection, {"automatic_import_error": error})
 
+    def record_income_scan(self, completed_at: datetime, error: str = "") -> None:
+        with self._connect() as connection:
+            self._set_many(
+                connection,
+                {
+                    "income_scan_at": _iso(completed_at),
+                    "income_scan_error": error,
+                },
+            )
+
     def library_refresh_pending(self) -> bool:
         return self.state().get("library_refresh_pending") == "1"
 

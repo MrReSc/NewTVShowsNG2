@@ -94,12 +94,20 @@ def test_manual_run_buttons_follow_import_setting(tmp_path) -> None:
     html = output.read_text(encoding="utf-8")
     assert 'method="post" action="/run/feed"' in html
     assert 'method="post" action="/run/import"' in html
+    assert 'method="post" action="/run/income-scan"' in html
+    media_view = html.split('id="media-import-view"', 1)[1].split('id="overview-view"', 1)[0]
+    overview_view = html.split('id="overview-view"', 1)[1].split('id="history-view"', 1)[0]
+    assert 'action="/run/feed"' not in media_view
+    assert 'action="/run/import"' not in overview_view
+    assert 'action="/run/income-scan"' not in overview_view
+    assert "(ohne Wartefrist)" not in html
 
     Renderer(storage, output, "Europe/Zurich", False).render()
     assert 'action="/run/import"' not in output.read_text(encoding="utf-8")
+    assert 'action="/run/income-scan"' not in output.read_text(encoding="utf-8")
 
 
-def test_manual_import_status_refreshes_until_result_is_visible(tmp_path) -> None:
+def test_manual_import_status_does_not_refresh_page(tmp_path) -> None:
     storage = Storage(tmp_path / "state.sqlite3")
     storage.initialize()
     output = tmp_path / "index.html"
@@ -109,13 +117,14 @@ def test_manual_import_status_refreshes_until_result_is_visible(tmp_path) -> Non
     storage.begin_manual_import(started)
     renderer.render()
     running = output.read_text(encoding="utf-8")
-    assert 'http-equiv="refresh" content="3"' in running
+    assert 'http-equiv="refresh"' not in running
     assert "Manuelles Einsortieren läuft" in running
+    assert "Seite neu laden" in running
 
     storage.complete_manual_import(started, "1 übernommen, 0 blockiert, 0 wartend", [])
     renderer.render()
     completed = output.read_text(encoding="utf-8")
-    assert 'http-equiv="refresh" content="3"' not in completed
+    assert 'http-equiv="refresh"' not in completed
     assert "1 übernommen, 0 blockiert, 0 wartend" in completed
 
 
@@ -147,6 +156,10 @@ def test_manual_run_endpoints_accept_same_origin_and_reject_other_origins(tmp_pa
             self.calls.append(kind)
             return self.available
 
+        def scan_income(self):
+            self.calls.append("income_scan")
+            return False if self.available else None
+
     output_path = tmp_path / "index.html"
     output_path.write_text("<!doctype html><title>Übersicht</title>", encoding="utf-8")
     storage = Storage(tmp_path / "state.sqlite3")
@@ -174,19 +187,23 @@ def test_manual_run_endpoints_accept_same_origin_and_reject_other_origins(tmp_pa
         origin = f"http://127.0.0.1:{server.server_address[1]}"
         assert request("POST", "/run/feed", {"Origin": origin})[:2] == (303, "/#overview")
         assert request("POST", "/run/import", {"Origin": origin})[:2] == (303, "/#media-import")
+        assert request("POST", "/run/income-scan", {"Origin": origin})[:2] == (303, "/#media-import")
         assert request("POST", "/run/feed", {"Referer": origin + "/"})[0] == 303
-        assert scanner.calls == ["feed", "import", "feed"]
+        assert scanner.calls == ["feed", "import", "income_scan", "feed"]
         assert request("POST", "/run/feed", {"Origin": "http://foreign.test"})[0] == 403
         assert request("POST", "/run/feed", {"Sec-Fetch-Site": "cross-site"})[0] == 403
         assert request("POST", "/run/feed", {"Referer": "http://foreign.test/page"})[0] == 403
         assert request("POST", "/run/feed")[0] == 403
-        assert scanner.calls == ["feed", "import", "feed"]
+        assert request("POST", "/run/income-scan", {"Origin": "http://foreign.test"})[0] == 403
+        assert scanner.calls == ["feed", "import", "income_scan", "feed"]
         scanner.available = False
         status, _, body = request("POST", "/run/feed", {"Origin": origin})
         assert status == 409
         assert "Ein anderer Lauf" in body
+        assert request("POST", "/run/income-scan", {"Origin": origin})[0] == 409
         scanner.config.media_import_enabled = False
         assert request("POST", "/run/import", {"Origin": origin})[0] == 404
+        assert request("POST", "/run/income-scan", {"Origin": origin})[0] == 404
         assert request("GET", "/run/feed")[0] == 404
         assert request("POST", "/run/unknown")[0] == 404
     finally:

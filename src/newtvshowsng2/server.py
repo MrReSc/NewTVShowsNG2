@@ -39,13 +39,13 @@ class RequestHandler(BaseHTTPRequestHandler):
     server: ApplicationServer
 
     def do_POST(self) -> None:
-        if self.path not in ("/run/feed", "/run/import"):
+        if self.path not in ("/run/feed", "/run/import", "/run/income-scan"):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         scanner = self.server.scanner
-        kind = "feed" if self.path == "/run/feed" else "import"
+        income_action = self.path in ("/run/import", "/run/income-scan")
         if scanner is None or (
-            kind == "import"
+            income_action
             and (not scanner.config.media_import_enabled or scanner.importer is None)
         ):
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -54,16 +54,22 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.FORBIDDEN, "Fremder Ursprung ist nicht erlaubt")
             return
         try:
-            started = scanner.start_manual(kind)
+            result = (
+                scanner.scan_income()
+                if self.path == "/run/income-scan"
+                else scanner.start_manual("feed" if self.path == "/run/feed" else "import")
+            )
         except Exception:
-            LOGGER.exception("Manueller %s-Lauf konnte nicht gestartet werden", kind)
+            LOGGER.exception("Aktion %s konnte nicht gestartet werden", self.path)
             self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Lauf konnte nicht gestartet werden")
             return
-        if not started:
+        if result is None or (self.path != "/run/income-scan" and not result):
             self.send_error(HTTPStatus.CONFLICT, "Ein anderer Lauf ist bereits aktiv")
             return
         self.send_response(HTTPStatus.SEE_OTHER)
-        self.send_header("Location", "/#overview" if kind == "feed" else "/#media-import")
+        self.send_header(
+            "Location", "/#overview" if self.path == "/run/feed" else "/#media-import"
+        )
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", "0")
         self.end_headers()

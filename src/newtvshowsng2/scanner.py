@@ -44,7 +44,6 @@ class Scanner:
         if self.importer is None and config.media_import_enabled:
             self.importer = MediaImporter(config, storage, self.jellyfin)
         self._lock = threading.Lock()
-        self._income_render_pending = False
 
     def run(self) -> bool:
         with self._lock:
@@ -83,16 +82,26 @@ class Scanner:
                     LOGGER.exception("Importfehler konnte nicht angezeigt werden")
                 return False
 
-    def observe_income(self) -> bool:
+    def scan_income(self) -> bool | None:
         if self.importer is None or not self.config.media_import_enabled:
-            return False
-        with self._lock:
+            raise ValueError("Medienimport ist deaktiviert")
+        if not self._lock.acquire(blocking=False):
+            return None
+        try:
             changed = self.importer.observe()
-            self._income_render_pending |= changed
-            if self._income_render_pending:
-                self.renderer.render()
-                self._income_render_pending = False
+            self.storage.record_income_scan(datetime.now(UTC))
+            self.renderer.render()
             return changed
+        except Exception as exc:
+            LOGGER.exception("Income-Scan fehlgeschlagen: %s", exc)
+            self.storage.record_income_scan(datetime.now(UTC), str(exc))
+            try:
+                self.renderer.render()
+            except Exception:
+                LOGGER.exception("Income-Scanfehler konnte nicht angezeigt werden")
+            raise
+        finally:
+            self._lock.release()
 
     def start_manual(self, kind: ManualRun) -> bool:
         if kind not in ("feed", "import"):

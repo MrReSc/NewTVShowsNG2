@@ -158,22 +158,34 @@ def test_feed_and_hourly_import_are_independent(tmp_path) -> None:
     assert storage.state()["scan_status"] == "ok"
 
 
-def test_observed_income_file_appears_on_auto_refresh_page(tmp_path) -> None:
+def test_income_scan_updates_page_without_automatic_refresh(tmp_path) -> None:
     cfg, storage, _ = setup(tmp_path)
     income = tmp_path / "income"
     income.mkdir()
     cfg = replace(cfg, media_import_enabled=True, income_dir=income)
     renderer = Renderer(storage, cfg.output_path, cfg.timezone, True)
     jellyfin = Jellyfin(Library([]))
+
+    def unexpected_jellyfin_call(*_args, **_kwargs):
+        raise AssertionError("Income-Scan darf Jellyfin nicht abfragen")
+
+    jellyfin.load_library = unexpected_jellyfin_call
+    jellyfin.tv_library_locations = unexpected_jellyfin_call
     importer = MediaImporter(cfg, storage, jellyfin)
-    scanner = Scanner(cfg, storage, renderer, jellyfin, CountingFeeds(), importer)
+    feeds = CountingFeeds()
+    scanner = Scanner(cfg, storage, renderer, jellyfin, feeds, importer)
     source = income / "Bookie.S02E09.mkv"
     source.write_bytes(b"still copying")
 
-    assert scanner.observe_income()
+    assert scanner.scan_income()
+    assert not scanner.scan_income()
 
     html = cfg.output_path.read_text(encoding="utf-8")
     assert source.name in html
     assert "Wartet auf Importprüfung" in html
-    assert 'http-equiv="refresh" content="15"' in html
-    assert "Dateien jetzt einsortieren (ohne Wartefrist)" in html
+    assert 'http-equiv="refresh"' not in html
+    assert "Income gescannt" in html
+    assert "Dateien jetzt einsortieren" in html
+    assert "(ohne Wartefrist)" not in html
+    assert source.exists()
+    assert feeds.calls == 0

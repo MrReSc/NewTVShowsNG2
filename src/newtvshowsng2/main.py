@@ -12,7 +12,6 @@ from .server import ApplicationServer
 from .storage import Storage
 
 LOGGER = logging.getLogger(__name__)
-INCOME_POLL_SECONDS = 15
 IMPORT_INTERVAL_SECONDS = 3600
 
 
@@ -37,12 +36,6 @@ def main() -> None:
     scanner = Scanner(config, storage, renderer)
     stop_event = threading.Event()
 
-    if config.media_import_enabled:
-        try:
-            scanner.observe_income()
-        except Exception:
-            LOGGER.exception("Income konnte beim Start nicht gelesen werden")
-
     def feed_scheduler() -> None:
         while not stop_event.is_set():
             scanner.run_feed()
@@ -55,24 +48,10 @@ def main() -> None:
             if stop_event.wait(IMPORT_INTERVAL_SECONDS):
                 break
 
-    def income_observer() -> None:
-        previous_error = ""
-        while not stop_event.wait(INCOME_POLL_SECONDS):
-            try:
-                scanner.observe_income()
-                previous_error = ""
-            except Exception as exc:
-                if str(exc) != previous_error:
-                    LOGGER.exception("Income konnte nicht gelesen werden: %s", exc)
-                    previous_error = str(exc)
-
     threads = [threading.Thread(target=feed_scheduler, name="feed", daemon=True)]
     if config.media_import_enabled:
-        threads.extend(
-            (
-                threading.Thread(target=import_scheduler, name="import", daemon=True),
-                threading.Thread(target=income_observer, name="income", daemon=True),
-            )
+        threads.append(
+            threading.Thread(target=import_scheduler, name="import", daemon=True)
         )
     for thread in threads:
         thread.start()
