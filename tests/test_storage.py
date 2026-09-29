@@ -1,6 +1,26 @@
 import sqlite3
+from datetime import UTC, datetime, timedelta
 
 from newtvshowsng2.storage import Storage
+
+
+def test_media_imports_keep_active_items_visible_beyond_history_limit(tmp_path) -> None:
+    storage = Storage(tmp_path / "state.sqlite3")
+    storage.initialize()
+    started = datetime(2026, 9, 29, 10, tzinfo=UTC)
+    for index in range(3):
+        source = f"show-{index}.mkv"
+        storage.observe_media_import(source, str(index), started + timedelta(minutes=index))
+        if index < 2:
+            storage.update_media_import(
+                source, "transferred", "Übernommen", transferred_at=started
+            )
+
+    rows = storage.media_imports(limit=1)
+
+    assert rows[0]["source_path"] == "show-2.mkv"
+    assert rows[0]["status"] == "waiting"
+    assert len(rows) == 2
 
 LEGACY_SCHEMA = """
 CREATE TABLE announcements (

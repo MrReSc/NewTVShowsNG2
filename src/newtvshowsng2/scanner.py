@@ -17,6 +17,7 @@ from .storage import Storage
 
 LOGGER = logging.getLogger(__name__)
 ManualRun = Literal["feed", "import"]
+ScanRun = Literal["full", "feed", "import", "automatic_feed"]
 
 
 class Scanner:
@@ -43,12 +44,55 @@ class Scanner:
         if self.importer is None and config.media_import_enabled:
             self.importer = MediaImporter(config, storage, self.jellyfin)
         self._lock = threading.Lock()
+        self._income_render_pending = False
 
     def run(self) -> bool:
         with self._lock:
             started_at = datetime.now(UTC)
             self._begin_run("full", started_at)
             return self._run_locked("full", started_at)
+
+    def run_feed(self) -> bool:
+        with self._lock:
+            started_at = datetime.now(UTC)
+            self._begin_run("automatic_feed", started_at)
+            return self._run_locked("automatic_feed", started_at)
+
+    def run_scheduled_import(self) -> bool:
+        if self.importer is None or not self.config.media_import_enabled:
+            return False
+        with self._lock:
+            try:
+                if not self.importer.has_work():
+                    if self.storage.state().get("automatic_import_error"):
+                        self.storage.set_automatic_import_error("")
+                        self.renderer.render()
+                    return False
+                result = self._import_media(
+                    self.jellyfin.load_library(), datetime.now(UTC), force=False
+                )
+                self.storage.set_automatic_import_error("\n".join(result.warnings))
+                self.renderer.render()
+                return True
+            except Exception as exc:
+                LOGGER.exception("Automatischer Medienimport fehlgeschlagen: %s", exc)
+                self.storage.set_automatic_import_error(str(exc))
+                try:
+                    self.renderer.render()
+                except Exception:
+                    LOGGER.exception("Importfehler konnte nicht angezeigt werden")
+                return False
+
+    def observe_income(self) -> bool:
+        if self.importer is None or not self.config.media_import_enabled:
+            return False
+        with self._lock:
+            changed = self.importer.observe()
+            self._income_render_pending |= changed
+            if self._income_render_pending:
+                self.renderer.render()
+                self._income_render_pending = False
+            return changed
 
     def start_manual(self, kind: ManualRun) -> bool:
         if kind not in ("feed", "import"):
@@ -91,22 +135,18 @@ class Scanner:
         finally:
             self._lock.release()
 
-    def _begin_run(
-        self, kind: Literal["full", "feed", "import"], started_at: datetime
-    ) -> None:
+    def _begin_run(self, kind: ScanRun, started_at: datetime) -> None:
         if kind == "import":
             self.storage.begin_manual_import(started_at)
             return
         next_run = (
             started_at + timedelta(seconds=self.config.interval_seconds)
-            if kind == "full"
+            if kind in ("full", "automatic_feed")
             else None
         )
         self.storage.begin_scan(started_at, next_run, manual=kind == "feed")
 
-    def _run_locked(
-        self, kind: Literal["full", "feed", "import"], started_at: datetime
-    ) -> bool:
+    def _run_locked(self, kind: ScanRun, started_at: datetime) -> bool:
         try:
             library = self.jellyfin.load_library()
             if kind == "import":
@@ -243,7 +283,7 @@ class Scanner:
             completed_at = datetime.now(UTC)
             next_run = (
                 completed_at + timedelta(seconds=self.config.interval_seconds)
-                if kind == "full"
+                if kind in ("full", "automatic_feed")
                 else None
             )
             self.storage.complete_scan(
@@ -268,7 +308,7 @@ class Scanner:
             else:
                 next_run = (
                     failed_at + timedelta(seconds=self.config.interval_seconds)
-                    if kind == "full"
+                    if kind in ("full", "automatic_feed")
                     else None
                 )
                 self.storage.fail_scan(failed_at, next_run, message)

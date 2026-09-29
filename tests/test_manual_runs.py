@@ -5,8 +5,9 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from threading import Event, Thread
 
-from newtvshowsng2.media_importer import ImportRunResult
+from newtvshowsng2.media_importer import ImportRunResult, MediaImporter
 from newtvshowsng2.models import Library
+from newtvshowsng2.rendering import Renderer
 from newtvshowsng2.scanner import Scanner
 from test_scanner_and_rendering import Jellyfin, setup
 
@@ -24,6 +25,10 @@ class CountingImporter:
     def __init__(self, result: ImportRunResult | None = None) -> None:
         self.calls: list[bool] = []
         self.result = result or ImportRunResult(transferred=2, blocked=1)
+        self.work_available = True
+
+    def has_work(self):
+        return self.work_available
 
     def run(self, _library, _now, *, force: bool):
         self.calls.append(force)
@@ -127,3 +132,48 @@ def test_interrupted_manual_import_is_reported_after_restart(tmp_path) -> None:
     state = storage.state()
     assert state["manual_import_status"] == "error"
     assert "Neustart unterbrochen" in state["manual_import_error"]
+
+
+def test_feed_and_hourly_import_are_independent(tmp_path) -> None:
+    cfg, storage, renderer = setup(tmp_path)
+    cfg = replace(cfg, media_import_enabled=True)
+    feeds = CountingFeeds()
+    importer = CountingImporter()
+    scanner = Scanner(cfg, storage, renderer, Jellyfin(Library([])), feeds, importer)
+
+    assert scanner.run_feed()
+    next_feed_run = storage.state()["next_run_at"]
+    assert feeds.calls == 1
+    assert importer.calls == []
+
+    importer.work_available = False
+    assert not scanner.run_scheduled_import()
+    assert importer.calls == []
+
+    importer.work_available = True
+    assert scanner.run_scheduled_import()
+    assert importer.calls == [False]
+    assert feeds.calls == 1
+    assert storage.state()["next_run_at"] == next_feed_run
+    assert storage.state()["scan_status"] == "ok"
+
+
+def test_observed_income_file_appears_on_auto_refresh_page(tmp_path) -> None:
+    cfg, storage, _ = setup(tmp_path)
+    income = tmp_path / "income"
+    income.mkdir()
+    cfg = replace(cfg, media_import_enabled=True, income_dir=income)
+    renderer = Renderer(storage, cfg.output_path, cfg.timezone, True)
+    jellyfin = Jellyfin(Library([]))
+    importer = MediaImporter(cfg, storage, jellyfin)
+    scanner = Scanner(cfg, storage, renderer, jellyfin, CountingFeeds(), importer)
+    source = income / "Bookie.S02E09.mkv"
+    source.write_bytes(b"still copying")
+
+    assert scanner.observe_income()
+
+    html = cfg.output_path.read_text(encoding="utf-8")
+    assert source.name in html
+    assert "Wartet auf Importprüfung" in html
+    assert 'http-equiv="refresh" content="15"' in html
+    assert "Dateien jetzt einsortieren (ohne Wartefrist)" in html

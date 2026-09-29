@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  {% if state.get('scan_status') == 'running' or state.get('manual_import_status') == 'running' %}<meta http-equiv="refresh" content="3">{% endif %}
+  {% if state.get('scan_status') == 'running' or state.get('manual_import_status') == 'running' %}<meta http-equiv="refresh" content="3">{% elif media_import_enabled %}<meta http-equiv="refresh" content="15">{% endif %}
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#121212">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -170,7 +170,7 @@
     </nav>
     <div class="actions" aria-label="Manuelle Läufe">
       <form method="post" action="/run/feed"><button type="submit">Feed jetzt abgleichen</button></form>
-      {% if media_import_enabled %}<form method="post" action="/run/import"><button type="submit">Dateien jetzt einsortieren</button></form>{% endif %}
+      {% if media_import_enabled %}<form method="post" action="/run/import"><button type="submit">Dateien jetzt einsortieren (ohne Wartefrist)</button></form>{% endif %}
     </div>
     <span class="tab-anchor" id="overview" aria-hidden="true"></span>
     <span class="tab-anchor" id="history" aria-hidden="true"></span>
@@ -197,6 +197,13 @@
         <strong>{% if import_status == 'running' %}Manuelles Einsortieren läuft{% elif import_status == 'error' %}Manuelles Einsortieren fehlgeschlagen{% else %}Manuelles Einsortieren abgeschlossen{% endif %}</strong>
         {% if import_status == 'running' %}Die Seite aktualisiert sich automatisch.{% else %}{{ state.get('manual_import_finished_at') | local_datetime }}{% if state.get('manual_import_summary') %} · {{ state.get('manual_import_summary') }}{% endif %}{% endif %}
         {% if state.get('manual_import_error') %}{{ state.get('manual_import_error') }}{% endif %}
+      </div>
+    {% endif %}
+
+    {% if state.get('automatic_import_error') %}
+      <div class="alert error details" role="alert">
+        <strong>Automatischer Medienimport mit Fehlern</strong>
+        {{ state.get('automatic_import_error') }}
       </div>
     {% endif %}
 
@@ -236,14 +243,14 @@
                       {% elif item.status == 'blocked' %}<span class="badge blocked">Blockiert</span>
                       {% else %}<span class="badge warning">Wartet</span>{% endif %}
                     </td>
-                    <td class="date-col" data-label="Details">{% if item.status == 'waiting' %}Wartet auf Stabilitätsfrist{% else %}{{ item.reason }}{% endif %}</td>
+                    <td class="date-col" data-label="Details">{{ item.reason or 'Wartet auf Importprüfung' }}</td>
                   </tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
         {% else %}
-          <div class="empty"><strong>Keine Dateien erkannt</strong><span>Income ist leer oder der erste Scan steht noch aus.</span></div>
+          <div class="empty"><strong>Keine Dateien erkannt</strong><span>Income ist leer oder wird gerade geprüft.</span></div>
         {% endif %}
       </div>
     </section>

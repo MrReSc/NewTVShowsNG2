@@ -77,6 +77,33 @@ class MediaImporter:
         self.storage = storage
         self.jellyfin = jellyfin
 
+    def observe(self, now: datetime | None = None) -> bool:
+        """Record Income changes without importing files or contacting Jellyfin."""
+        now = now or datetime.now(UTC)
+        if not self.config.income_dir.is_dir():
+            raise OSError(f"Income-Mount fehlt: {self.config.income_dir}")
+        changed = False
+        seen_paths: set[str] = set()
+        for path in sorted(
+            self.config.income_dir.iterdir(), key=lambda item: item.name.casefold()
+        ):
+            relative = path.relative_to(self.config.income_dir).as_posix()
+            seen_paths.add(relative)
+            signature = self._best_effort_signature(path)
+            _, source_changed, _ = self.storage.observe_media_import(
+                relative, signature, now, touch=False
+            )
+            changed |= source_changed
+        removed = self.storage.forget_unseen_media_imports(seen_paths)
+        return changed or removed > 0
+
+    def has_work(self) -> bool:
+        if self.storage.library_refresh_pending():
+            return True
+        if not self.config.income_dir.is_dir():
+            return True
+        return any(self.config.income_dir.iterdir())
+
     def run(
         self, library: Library, now: datetime | None = None, *, force: bool = False
     ) -> ImportRunResult:

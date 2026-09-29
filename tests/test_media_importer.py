@@ -98,6 +98,49 @@ def test_existing_series_release_folder_moves_after_stability_window(tmp_path) -
     assert row["target_path"].startswith("Bookie (2023)/Staffel 02/")
 
 
+def test_income_observation_records_changes_without_importing(tmp_path) -> None:
+    jellyfin = Jellyfin()
+    config, storage, importer = setup(tmp_path, jellyfin)
+    source = config.income_dir / "Bookie.S02E09.mkv"
+    source.write_bytes(b"partial")
+    started = datetime(2026, 9, 28, 10, tzinfo=UTC)
+
+    assert importer.observe(started)
+    row = storage.media_imports()[0]
+    assert row["source_path"] == source.name
+    assert row["status"] == "waiting"
+    assert row["reason"] == "Wartet auf Importprüfung"
+    assert row["first_seen_at"] == started.isoformat()
+    assert not importer.observe(started + timedelta(seconds=15))
+    assert storage.media_imports()[0]["first_seen_at"] == started.isoformat()
+    storage.update_media_import(source.name, "blocked", "Prüfung fehlgeschlagen")
+    assert not importer.observe(started + timedelta(seconds=30))
+    assert storage.media_imports()[0]["status"] == "blocked"
+    assert jellyfin.refresh_calls == 0
+    assert not list(config.shows_dir.iterdir())
+
+    source.write_bytes(b"complete")
+    changed_at = started + timedelta(minutes=1)
+    assert importer.observe(changed_at)
+    assert storage.media_imports()[0]["first_seen_at"] == changed_at.isoformat()
+    assert storage.media_imports()[0]["status"] == "waiting"
+
+    source.unlink()
+    assert importer.observe(changed_at + timedelta(seconds=15))
+    assert storage.media_imports() == []
+
+
+def test_income_work_check_includes_pending_jellyfin_refresh(tmp_path) -> None:
+    config, storage, importer = setup(tmp_path, Jellyfin())
+    assert not importer.has_work()
+    source = config.income_dir / "Bookie.S01E01.mkv"
+    source.write_bytes(b"episode")
+    assert importer.has_work()
+    source.unlink()
+    storage.set_library_refresh_pending(True)
+    assert importer.has_work()
+
+
 def test_forced_import_skips_stability_window_but_checks_source_changes(tmp_path) -> None:
     jellyfin = Jellyfin()
     config, storage, importer = setup(tmp_path, jellyfin)

@@ -381,7 +381,7 @@ class Storage:
             }
 
     def observe_media_import(
-        self, source_path: str, signature: str, seen_at: datetime
+        self, source_path: str, signature: str, seen_at: datetime, *, touch: bool = True
     ) -> tuple[datetime, bool, str]:
         """Record a source and return stable-since time, change flag and status."""
         now = _iso(seen_at)
@@ -398,18 +398,18 @@ class Storage:
                     INSERT INTO media_imports (
                         source_path, signature, first_seen_at, last_seen_at, status, reason,
                         parsed_title, season, episode, target_path, transferred_at
-                    ) VALUES (?, ?, ?, ?, 'waiting', '', NULL, NULL, NULL, NULL, NULL)
+                    ) VALUES (?, ?, ?, ?, 'waiting', 'Wartet auf Importprüfung', NULL, NULL, NULL, NULL, NULL)
                     ON CONFLICT(source_path) DO UPDATE SET
                         signature = excluded.signature,
                         first_seen_at = excluded.first_seen_at,
                         last_seen_at = excluded.last_seen_at,
-                        status = 'waiting', reason = '', parsed_title = NULL,
+                        status = 'waiting', reason = 'Wartet auf Importprüfung', parsed_title = NULL,
                         season = NULL, episode = NULL, target_path = NULL,
                         transferred_at = NULL
                     """,
                     (source_path, signature, now, now),
                 )
-            else:
+            elif touch:
                 connection.execute(
                     "UPDATE media_imports SET last_seen_at = ? WHERE source_path = ?",
                     (now, source_path),
@@ -450,17 +450,20 @@ class Storage:
 
     def media_imports(self, limit: int = 300) -> list[dict[str, Any]]:
         with self._connect() as connection:
-            return [
-                dict(row)
-                for row in connection.execute(
-                    """
-                    SELECT * FROM media_imports
-                    ORDER BY COALESCE(transferred_at, last_seen_at) DESC
-                    LIMIT ?
-                    """,
-                    (limit,),
-                ).fetchall()
-            ]
+            active = connection.execute(
+                """
+                SELECT * FROM media_imports WHERE status != 'transferred'
+                ORDER BY last_seen_at DESC
+                """
+            ).fetchall()
+            transferred = connection.execute(
+                """
+                SELECT * FROM media_imports WHERE status = 'transferred'
+                ORDER BY transferred_at DESC LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in (*active, *transferred)]
 
     def media_import_target(self, source_path: str) -> str | None:
         with self._connect() as connection:
@@ -472,19 +475,24 @@ class Storage:
             return None
         return str(row["target_path"])
 
-    def forget_unseen_media_imports(self, seen_paths: set[str]) -> None:
+    def forget_unseen_media_imports(self, seen_paths: set[str]) -> int:
         with self._connect() as connection:
             if seen_paths:
                 placeholders = ", ".join("?" for _ in seen_paths)
-                connection.execute(
+                deleted = connection.execute(
                     f"DELETE FROM media_imports WHERE status != 'transferred' "
                     f"AND source_path NOT IN ({placeholders})",
                     tuple(sorted(seen_paths)),
                 )
             else:
-                connection.execute(
+                deleted = connection.execute(
                     "DELETE FROM media_imports WHERE status != 'transferred'"
                 )
+        return deleted.rowcount
+
+    def set_automatic_import_error(self, error: str) -> None:
+        with self._connect() as connection:
+            self._set_many(connection, {"automatic_import_error": error})
 
     def library_refresh_pending(self) -> bool:
         return self.state().get("library_refresh_pending") == "1"
