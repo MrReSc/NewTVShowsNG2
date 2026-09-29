@@ -92,14 +92,26 @@ def test_manual_run_buttons_follow_import_setting(tmp_path) -> None:
 
     Renderer(storage, output, "Europe/Zurich", True).render()
     html = output.read_text(encoding="utf-8")
+    header = html.split('<header class="topbar">', 1)[1].split('</header>', 1)[0]
     assert 'method="post" action="/run/feed"' in html
     assert 'method="post" action="/run/import"' in html
     assert 'method="post" action="/run/income-scan"' in html
     media_view = html.split('id="media-import-view"', 1)[1].split('id="overview-view"', 1)[0]
     overview_view = html.split('id="overview-view"', 1)[1].split('id="history-view"', 1)[0]
+    history_view = html.split('id="history-view"', 1)[1].split('<footer>', 1)[0]
+    assert 'scan-state' not in header
+    assert "Nächster Lauf:" not in header
     assert 'action="/run/feed"' not in media_view
     assert 'action="/run/import"' not in overview_view
     assert 'action="/run/income-scan"' not in overview_view
+    assert 'class="scan-state"' in media_view
+    assert "Import bereit" in media_view
+    assert 'class="scan-state starting"' in overview_view
+    assert "Wird vorbereitet" in overview_view
+    assert "Nächster Lauf:" in overview_view
+    assert 'class="scan-state starting"' in history_view
+    assert "Nächster Lauf:" in history_view
+    assert 'action="/run/feed"' not in history_view
     assert "(ohne Wartefrist)" not in html
 
     Renderer(storage, output, "Europe/Zurich", False).render()
@@ -107,7 +119,7 @@ def test_manual_run_buttons_follow_import_setting(tmp_path) -> None:
     assert 'action="/run/income-scan"' not in output.read_text(encoding="utf-8")
 
 
-def test_manual_import_status_does_not_refresh_page(tmp_path) -> None:
+def test_manual_import_refreshes_only_while_running(tmp_path) -> None:
     storage = Storage(tmp_path / "state.sqlite3")
     storage.initialize()
     output = tmp_path / "index.html"
@@ -117,30 +129,73 @@ def test_manual_import_status_does_not_refresh_page(tmp_path) -> None:
     storage.begin_manual_import(started)
     renderer.render()
     running = output.read_text(encoding="utf-8")
-    assert 'http-equiv="refresh"' not in running
+    assert 'http-equiv="refresh" content="3"' in running
     assert "Manuelles Einsortieren läuft" in running
-    assert "Seite neu laden" in running
+    assert 'class="scan-state running">Import läuft' in running
+    assert "Die Seite wird nach dem Abschluss automatisch aktualisiert." in running
+    assert "Manuelles Einsortieren läuft" not in running.split('id="overview-view"', 1)[1]
 
     storage.complete_manual_import(started, "1 übernommen, 0 blockiert, 0 wartend", [])
     renderer.render()
     completed = output.read_text(encoding="utf-8")
     assert 'http-equiv="refresh"' not in completed
-    assert "1 übernommen, 0 blockiert, 0 wartend" in completed
+    assert "Manuelles Einsortieren abgeschlossen" not in completed
+    assert "Manuelles Einsortieren läuft" not in completed
+    assert 'class="scan-state">Import bereit' in completed
+
+    storage.fail_manual_import(started, "Jellyfin nicht erreichbar")
+    renderer.render()
+    failed = output.read_text(encoding="utf-8")
+    assert 'http-equiv="refresh"' not in failed
+    assert "Manuelles Einsortieren fehlgeschlagen" not in failed
+    assert 'class="scan-state error">Letzter manueller Import fehlgeschlagen' in failed
 
 
-def test_manual_feed_warnings_are_visible(tmp_path) -> None:
+def test_manual_feed_refreshes_only_while_running(tmp_path) -> None:
     storage = Storage(tmp_path / "state.sqlite3")
     storage.initialize()
     output = tmp_path / "index.html"
     completed = datetime(2026, 9, 29, 10, tzinfo=UTC)
     storage.begin_scan(completed, None, manual=True)
-    storage.complete_scan(completed, None, ["RSS-Abruf fehlgeschlagen"])
+    renderer = Renderer(storage, output, "Europe/Zurich")
+    renderer.render()
+    running = output.read_text(encoding="utf-8")
+    assert 'http-equiv="refresh" content="3"' in running
+    assert "Feed-Abgleich läuft" in running
+    assert "Feed-Abgleich läuft" not in running.split('id="media-import-view"', 1)[1].split('id="overview-view"', 1)[0]
 
-    Renderer(storage, output, "Europe/Zurich").render()
+    storage.complete_scan(completed, None, ["RSS-Abruf fehlgeschlagen"])
+    renderer.render()
 
     html = output.read_text(encoding="utf-8")
-    assert "Feed-Abgleich mit Warnungen abgeschlossen" in html
-    assert "RSS-Abruf fehlgeschlagen" in html
+    assert 'http-equiv="refresh"' not in html
+    assert "Feed-Abgleich läuft" not in html
+    assert "Feed-Abgleich abgeschlossen" not in html
+    assert html.count('class="scan-state warning">') == 2
+
+
+def test_error_notices_appear_only_in_matching_view(tmp_path) -> None:
+    storage = Storage(tmp_path / "state.sqlite3")
+    storage.initialize()
+    completed = datetime(2026, 9, 29, 10, tzinfo=UTC)
+    storage.fail_scan(completed, None, "Feed nicht erreichbar")
+    storage.set_automatic_import_error("Import nicht möglich")
+    storage.record_income_scan(completed, "Income nicht lesbar")
+    storage.set_library_refresh_pending(True)
+    output = tmp_path / "index.html"
+
+    Renderer(storage, output, "Europe/Zurich", True).render()
+
+    html = output.read_text(encoding="utf-8")
+    media_view = html.split('id="media-import-view"', 1)[1].split('id="overview-view"', 1)[0]
+    overview_view = html.split('id="overview-view"', 1)[1].split('id="history-view"', 1)[0]
+    assert "Feed nicht erreichbar" in overview_view
+    assert "Feed nicht erreichbar" not in media_view
+    assert "Import nicht möglich" in media_view
+    assert "Income nicht lesbar" in media_view
+    assert "Jellyfin-Bibliotheksscan ausstehend" in media_view
+    assert "Import nicht möglich" not in overview_view
+    assert "Income nicht lesbar" not in overview_view
 
 
 def test_manual_run_endpoints_accept_same_origin_and_reject_other_origins(tmp_path) -> None:

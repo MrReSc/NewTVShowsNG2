@@ -68,7 +68,8 @@ def test_manual_run_modes_are_separate_and_keep_automatic_schedule(tmp_path) -> 
     assert feeds.calls == 1
     assert storage.state()["next_run_at"] == next_run.isoformat()
     assert {key: storage.state()[key] for key in feed_state} == feed_state
-    assert "2 übernommen, 1 blockiert" in cfg.output_path.read_text()
+    assert "2 übernommen, 1 blockiert" in storage.state()["manual_import_summary"]
+    assert "Manuelles Einsortieren abgeschlossen" not in cfg.output_path.read_text()
 
 
 def test_automatic_run_waits_for_manual_run_and_uses_stability_window(tmp_path) -> None:
@@ -118,9 +119,10 @@ def test_manual_import_failure_does_not_change_feed_status(tmp_path) -> None:
     scanner = Scanner(cfg, storage, renderer, jellyfin, CountingFeeds(), CountingImporter())
     assert scanner.start_manual("import")
     wait_for(lambda: storage.state().get("manual_import_status") == "error")
+    wait_for(lambda: not scanner._lock.locked())
     assert storage.state()["scan_status"] == "ok"
     assert storage.state()["next_run_at"] == next_run.isoformat()
-    assert "Jellyfin nicht erreichbar" in cfg.output_path.read_text()
+    assert storage.state()["manual_import_error"] == "Jellyfin nicht erreichbar"
 
 
 def test_interrupted_manual_import_is_reported_after_restart(tmp_path) -> None:
@@ -158,7 +160,7 @@ def test_feed_and_hourly_import_are_independent(tmp_path) -> None:
     assert storage.state()["scan_status"] == "ok"
 
 
-def test_income_scan_updates_page_without_automatic_refresh(tmp_path) -> None:
+def test_income_scan_updates_page_without_completion_notice(tmp_path) -> None:
     cfg, storage, _ = setup(tmp_path)
     income = tmp_path / "income"
     income.mkdir()
@@ -184,7 +186,7 @@ def test_income_scan_updates_page_without_automatic_refresh(tmp_path) -> None:
     assert source.name in html
     assert "Wartet auf Importprüfung" in html
     assert 'http-equiv="refresh"' not in html
-    assert "Income gescannt" in html
+    assert "Income gescannt" not in html
     assert "Dateien jetzt einsortieren" in html
     assert "(ohne Wartefrist)" not in html
     assert source.exists()

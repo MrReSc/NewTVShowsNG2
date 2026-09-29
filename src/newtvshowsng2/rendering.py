@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import re
 import tempfile
@@ -64,17 +63,11 @@ class Renderer:
         history = self.storage.announcements()
         media_imports = self.storage.media_imports()
         state = self.storage.state()
-        try:
-            feed_warnings = json.loads(state.get("feed_errors", "[]"))
-        except json.JSONDecodeError:
-            feed_warnings = []
-
         html = self.environment.get_template("index.html").render(
             current=current,
             history=history,
             media_imports=media_imports,
             state=state,
-            feed_warnings=feed_warnings,
             media_import_enabled=self.media_import_enabled,
             generated_at=datetime.now(UTC),
         )
