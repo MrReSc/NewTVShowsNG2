@@ -465,6 +465,13 @@ class Storage:
             ).fetchall()
             return [dict(row) for row in (*active, *transferred)]
 
+    def media_import(self, source_path: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM media_imports WHERE source_path = ?", (source_path,)
+            ).fetchone()
+        return dict(row) if row is not None else None
+
     def media_import_target(self, source_path: str) -> str | None:
         with self._connect() as connection:
             row = connection.execute(

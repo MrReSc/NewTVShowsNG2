@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Serienzuordnung · NewTVShowsNG2</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    body { margin: 0; background: #121212; color: #f5f5f5; line-height: 1.5; }
+    main { width: min(820px, calc(100% - 32px)); margin: 32px auto 64px; }
+    a { color: #53e4d3; text-underline-offset: 3px; }
+    a:focus-visible, button:focus-visible { outline: 2px solid #00d8c1; outline-offset: 3px; }
+    h1 { font-size: 1.45rem; margin: 22px 0 8px; }
+    p { color: #a9a9a9; }
+    .source { overflow-wrap: anywhere; color: #f5f5f5; }
+    .choice { border: 1px solid #303030; border-radius: 8px; background: #191919; margin: 16px 0; padding: 18px; }
+    .choice h2 { margin: 0 0 6px; font-size: 1.1rem; }
+    .ids { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+    .ids span { border: 1px solid #3d6661; border-radius: 5px; padding: 3px 8px; font-size: .85rem; overflow-wrap: anywhere; }
+    .choice form { margin-top: 16px; }
+    button { border: 1px solid #3d6661; border-radius: 5px; background: #0c302d; color: #53e4d3; padding: 9px 13px; font: inherit; font-weight: 700; cursor: pointer; }
+    button:hover { background: #17433e; }
+  </style>
+</head>
+<body>
+  <main>
+    <a href="/#media-import">← Zurück zum Medienimport</a>
+    <h1>Serienzuordnung wählen</h1>
+    <p class="source">Income: {{ options.source_path }}</p>
+    <p>Prüfe den passenden Jellyfin-Treffer. Die Auswahl importiert alle aktuell gefundenen Folgen dieser Serie sofort. Weitere Folgen werden nach der Übernahme durch Jellyfin zugeordnet.</p>
+    {% for choice in options.choices %}
+      <section class="choice">
+        <h2>{{ choice.remote.name }}{% if choice.remote.production_year %} ({{ choice.remote.production_year }}){% endif %}</h2>
+        <div class="ids" aria-label="Provider-IDs">
+          {% for provider, value in choice.remote.provider_ids %}
+            <span>{{ provider }}: {{ value }}</span>
+          {% endfor %}
+        </div>
+        {% if choice.imdb_url %}
+          <a href="{{ choice.imdb_url }}" target="_blank" rel="noopener noreferrer">Auf IMDb prüfen</a>
+        {% else %}
+          <p>Für diesen Treffer ist kein IMDb-Link verfügbar.</p>
+        {% endif %}
+        <form method="post" action="/run/import/resolve">
+          <input type="hidden" name="source" value="{{ options.source_path }}">
+          <input type="hidden" name="signature" value="{{ options.signature }}">
+          <input type="hidden" name="choice" value="{{ choice.key }}">
+          <button type="submit">Diese Serie wählen und importieren</button>
+        </form>
+      </section>
+    {% endfor %}
+  </main>
+</body>
+</html>

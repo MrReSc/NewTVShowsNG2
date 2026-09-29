@@ -9,7 +9,7 @@ from .config import Config
 from .feeds import FeedClient, FeedError
 from .jellyfin import JellyfinClient, JellyfinError
 from .matching import match_release
-from .media_importer import ImportRunResult, MediaImporter
+from .media_importer import ImportRunResult, MediaImporter, SelectedSeries
 from .models import Library, SeasonInventory
 from .parsing import parse_release
 from .rendering import Renderer
@@ -138,9 +138,46 @@ class Scanner:
             raise
         return True
 
-    def _manual_worker(self, kind: ManualRun, started_at: datetime) -> None:
+    def start_selected_import(
+        self, source_path: str, signature: str, choice_key: str
+    ) -> bool:
+        if self.importer is None or not self.config.media_import_enabled:
+            raise ValueError("Medienimport ist deaktiviert")
+        if not self._lock.acquire(blocking=False):
+            return False
+        began = started = False
         try:
-            self._run_locked(kind, started_at)
+            selection = self.importer.select_series(source_path, signature, choice_key)
+            started_at = datetime.now(UTC)
+            self._begin_run("import", started_at)
+            began = True
+            self.renderer.render()
+            worker = threading.Thread(
+                target=self._manual_worker,
+                args=("import", started_at, selection),
+                name="manual-series-import",
+                daemon=True,
+            )
+            worker.start()
+            started = True
+            return True
+        except Exception:
+            if began:
+                self.storage.fail_manual_import(
+                    datetime.now(UTC), "Serienimport konnte nicht gestartet werden"
+                )
+                self.renderer.render()
+            raise
+        finally:
+            if not started:
+                self._lock.release()
+
+    def _manual_worker(
+        self, kind: ManualRun, started_at: datetime,
+        selection: SelectedSeries | None = None,
+    ) -> None:
+        try:
+            self._run_locked(kind, started_at, selection=selection)
         finally:
             self._lock.release()
 
@@ -155,11 +192,16 @@ class Scanner:
         )
         self.storage.begin_scan(started_at, next_run, manual=kind == "feed")
 
-    def _run_locked(self, kind: ScanRun, started_at: datetime) -> bool:
+    def _run_locked(
+        self, kind: ScanRun, started_at: datetime,
+        *, selection: SelectedSeries | None = None,
+    ) -> bool:
         try:
             library = self.jellyfin.load_library()
             if kind == "import":
-                result = self._import_media(library, started_at, force=True)
+                result = self._import_media(
+                    library, started_at, force=True, selection=selection
+                )
                 summary = (
                     f"{result.transferred} übernommen, {result.blocked} blockiert, "
                     f"{result.waiting} wartend"
@@ -328,10 +370,16 @@ class Scanner:
             return False
 
     def _import_media(
-        self, library: Library, started_at: datetime, *, force: bool
+        self, library: Library, started_at: datetime, *, force: bool,
+        selection: SelectedSeries | None = None,
     ) -> ImportRunResult:
         assert self.importer is not None
-        result = self.importer.run(library, started_at, force=force)
+        if selection is None:
+            result = self.importer.run(library, started_at, force=force)
+        else:
+            result = self.importer.run(
+                library, started_at, force=force, selection=selection
+            )
         LOGGER.info(
             "Medienimport: %d übernommen, %d blockiert, %d wartend",
             result.transferred,

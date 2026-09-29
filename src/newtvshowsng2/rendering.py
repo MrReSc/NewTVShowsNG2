@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from .logging_utils import LOG_PAGE_LINES, read_recent_log_lines
+from .media_importer import SelectionOptions
 from .storage import Storage
 
 QUALITY_PATTERN = re.compile(
@@ -78,6 +79,11 @@ class Renderer:
             .read_text(encoding="utf-8")
         )
         self._atomic_write(self.favicon_path, favicon)
+
+    def render_selection(self, options: SelectionOptions) -> str:
+        return self.environment.get_template("series_selection.html").render(
+            options=options
+        )
 
     @staticmethod
     def _atomic_write(path: Path, content: str) -> None:

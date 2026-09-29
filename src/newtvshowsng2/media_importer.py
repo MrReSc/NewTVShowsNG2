@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import fcntl
+import json
 import logging
 import os
 import re
@@ -66,6 +67,33 @@ class SourceUnit:
     signature: str
 
 
+@dataclass(frozen=True, slots=True)
+class SeriesChoice:
+    remote: RemoteSeries
+    key: str
+    imdb_url: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class SelectionOptions:
+    source_path: str
+    signature: str
+    parsed: ParsedRelease
+    choices: tuple[SeriesChoice, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedSeries:
+    source_path: str
+    signature: str
+    parsed: ParsedRelease
+    remote: RemoteSeries
+
+
+class SelectionUnavailable(ValueError):
+    pass
+
+
 class MediaImporter:
     def __init__(
         self,
@@ -104,12 +132,74 @@ class MediaImporter:
             return True
         return any(self.config.income_dir.iterdir())
 
+    def selection_options(self, source_path: str) -> SelectionOptions:
+        if (
+            not source_path
+            or source_path in (".", "..")
+            or Path(source_path).name != source_path
+            or "\x00" in source_path
+        ):
+            raise SelectionUnavailable("Ungültiger Income-Eintrag")
+        row = self.storage.media_import(source_path)
+        if row is None or row["status"] != "needs_selection":
+            raise SelectionUnavailable("Für diesen Eintrag ist keine Serienauswahl offen")
+        path = self.config.income_dir / source_path
+        try:
+            unit = self._inspect_source(path)
+            parsed = self._parse_source(unit)
+        except (OSError, ImportBlocked) as exc:
+            raise SelectionUnavailable(
+                f"Income-Eintrag konnte nicht geprüft werden: {exc}"
+            ) from exc
+        if unit.signature != row["signature"]:
+            raise SelectionUnavailable(
+                "Income-Eintrag wurde verändert; bitte Importprüfung erneut starten"
+            )
+        if parsed is None or parsed.episode is None or parsed.season != parsed.season_end:
+            raise SelectionUnavailable("Serie und Episode sind nicht mehr eindeutig lesbar")
+        candidates = self._remote_candidates(parsed)
+        if len(candidates) < 2:
+            raise SelectionUnavailable("Jellyfin meldet keine mehrdeutige Serienauswahl mehr")
+        choices = tuple(
+            SeriesChoice(remote, _choice_key(remote), _imdb_url(remote))
+            for remote in candidates
+        )
+        return SelectionOptions(source_path, unit.signature, parsed, choices)
+
+    def select_series(
+        self, source_path: str, signature: str, choice_key: str
+    ) -> SelectedSeries:
+        options = self.selection_options(source_path)
+        if options.signature != signature:
+            raise SelectionUnavailable(
+                "Income-Eintrag wurde verändert; bitte Auswahl neu öffnen"
+            )
+        matches = [choice for choice in options.choices if choice.key == choice_key]
+        if len(matches) != 1:
+            raise SelectionUnavailable(
+                "Jellyfin-Suchergebnis wurde verändert; bitte Auswahl neu öffnen"
+            )
+        return SelectedSeries(source_path, signature, options.parsed, matches[0].remote)
+
     def run(
-        self, library: Library, now: datetime | None = None, *, force: bool = False
+        self, library: Library, now: datetime | None = None, *,
+        force: bool = False, selection: SelectedSeries | None = None,
     ) -> ImportRunResult:
         now = now or datetime.now(UTC)
         self._validate_mounts()
         self._validate_jellyfin_root()
+
+        if selection is not None:
+            selected_source = self.config.income_dir / selection.source_path
+            try:
+                current = self._inspect_source(selected_source)
+                current_parsed = self._parse_source(current)
+            except (OSError, ImportBlocked) as exc:
+                raise SelectionUnavailable(f"Income-Eintrag wurde verändert: {exc}") from exc
+            if current.signature != selection.signature or current_parsed != selection.parsed:
+                raise SelectionUnavailable(
+                    "Income-Eintrag wurde verändert; bitte Auswahl neu öffnen"
+                )
 
         if self.storage.library_refresh_pending():
             try:
@@ -126,6 +216,11 @@ class MediaImporter:
         new_series: dict[tuple[str, int | None, str | None], tuple[Path, str]] = {}
         new_series_paths: set[Path] = set()
         units = sorted(self.config.income_dir.iterdir(), key=lambda item: item.name.casefold())
+        if selection is not None:
+            units = [path for path in units if self._belongs_to_selection(path, selection)]
+            units.sort(
+                key=lambda path: (path.name != selection.source_path, path.name.casefold())
+            )
         for path in units:
             relative = path.relative_to(self.config.income_dir).as_posix()
             seen_paths.add(relative)
@@ -188,7 +283,8 @@ class MediaImporter:
 
             try:
                 target_series, display_name, jellyfin_series = self._resolve_series(
-                    parsed, library, new_series, new_series_paths
+                    parsed, library, new_series, new_series_paths,
+                    selected_remote=selection.remote if selection is not None else None,
                 )
                 season_path = self._resolve_season_path(
                     target_series, parsed.season
@@ -203,6 +299,20 @@ class MediaImporter:
                 target, transfer_warning = self._transfer(
                     unit, target_series, season_path
                 )
+            except ImportWaiting as exc:
+                self.storage.update_media_import(
+                    relative, "waiting", str(exc), parsed_title=parsed.series_title,
+                    season=parsed.season, episode=parsed.episode,
+                )
+                waiting += 1
+                continue
+            except ImportSelectionRequired as exc:
+                self.storage.update_media_import(
+                    relative, "needs_selection", str(exc), parsed_title=parsed.series_title,
+                    season=parsed.season, episode=parsed.episode,
+                )
+                blocked += 1
+                continue
             except ImportBlocked as exc:
                 self.storage.update_media_import(
                     relative,
@@ -244,7 +354,8 @@ class MediaImporter:
                 warnings.append(f"{relative}: {transfer_warning}")
             transferred += 1
 
-        self.storage.forget_unseen_media_imports(seen_paths)
+        if selection is None:
+            self.storage.forget_unseen_media_imports(seen_paths)
         if transferred:
             self.storage.set_library_refresh_pending(True)
             try:
@@ -257,6 +368,22 @@ class MediaImporter:
                 self.storage.set_library_refresh_pending(False)
 
         return ImportRunResult(transferred, blocked, waiting, tuple(warnings))
+
+    def _belongs_to_selection(self, path: Path, selection: SelectedSeries) -> bool:
+        if path.name == selection.source_path:
+            return True
+        try:
+            parsed = self._parse_source(self._inspect_source(path))
+        except (OSError, ImportBlocked):
+            return False
+        if parsed is None or parsed.normalized_title != selection.parsed.normalized_title:
+            return False
+        if parsed.year is not None and parsed.year != selection.remote.production_year:
+            return False
+        remote_imdb = _provider_id(selection.remote, "imdb")
+        return not parsed.imdb_id or parsed.imdb_id.casefold() == (
+            remote_imdb or ""
+        ).casefold()
 
     def _validate_mounts(self) -> None:
         if not self.config.income_dir.is_dir():
@@ -346,6 +473,8 @@ class MediaImporter:
         library: Library,
         new_series: dict[tuple[str, int | None, str | None], tuple[Path, str]],
         new_series_paths: set[Path],
+        *,
+        selected_remote: RemoteSeries | None = None,
     ) -> tuple[Path, str, Series | None]:
         match = match_release(parsed, library.series)
         if match is not None:
@@ -353,6 +482,10 @@ class MediaImporter:
                 raise ImportBlocked(
                     f"Bestehende Serie ist nicht eindeutig zugeordnet ({match.method})"
                 )
+            if selected_remote is not None and match.series not in _series_with_remote_provider(
+                selected_remote, library.series
+            ):
+                raise ImportBlocked("Jellyfin-Serie widerspricht der gewählten Provider-ID")
             return (
                 self._existing_series_path(match.series),
                 match.series.name,
@@ -364,7 +497,13 @@ class MediaImporter:
             target, display_name = new_series[identity]
             return target, display_name, None
 
-        remote = self._unique_remote_match(parsed)
+        if selected_remote is None:
+            pending = self._pending_jellyfin_folder(parsed)
+            if pending is not None:
+                raise ImportWaiting(
+                    f"Wartet auf Jellyfin-Bibliothekseintrag für {pending.name}"
+                )
+        remote = selected_remote or self._unique_remote_match(parsed)
         provider_matches = _series_with_remote_provider(remote, library.series)
         if len(provider_matches) > 1:
             raise ImportBlocked(
@@ -393,6 +532,28 @@ class MediaImporter:
         new_series[identity] = result
         new_series_paths.add(target)
         return target, remote.name, None
+
+    def _pending_jellyfin_folder(self, parsed: ParsedRelease) -> Path | None:
+        for child in self.config.shows_dir.iterdir():
+            if not child.is_dir() or child.is_symlink():
+                continue
+            if not re.search(
+                r"\[(?:imdb|tvdb|tmdb)id-[A-Za-z0-9._-]+\]$",
+                child.name,
+                flags=re.IGNORECASE,
+            ):
+                continue
+            if parsed.normalized_title not in _folder_title_variants(child.name):
+                continue
+            year_match = re.search(r"\(((?:19|20)\d{2})\)\s+\[", child.name)
+            if parsed.year is not None and (
+                year_match is None or int(year_match.group(1)) != parsed.year
+            ):
+                continue
+            if _directory_tree_empty(child):
+                continue
+            return child
+        return None
 
     def _existing_series_path(self, series: Series) -> Path:
         if not series.path:
@@ -458,6 +619,18 @@ class MediaImporter:
         )
 
     def _unique_remote_match(self, parsed: ParsedRelease) -> RemoteSeries:
+        candidates = self._remote_candidates(parsed)
+        if len(candidates) > 1:
+            raise ImportSelectionRequired(
+                "Neue Serie ist nicht eindeutig zugeordnet; mehrere Jellyfin-Treffer passen"
+            )
+        if not candidates:
+            raise ImportBlocked(
+                "Neue Serie konnte über Jellyfin nicht eindeutig mit Provider-ID bestimmt werden"
+            )
+        return candidates[0]
+
+    def _remote_candidates(self, parsed: ParsedRelease) -> list[RemoteSeries]:
         try:
             search_name = re.sub(r"[._]+", " ", parsed.series_title).strip()
             if parsed.year is not None:
@@ -507,13 +680,9 @@ class MediaImporter:
                 ]
 
         identities = {
-            (item.name, item.production_year, item.provider_ids): item for item in candidates
+            _choice_key(item): item for item in candidates
         }
-        if len(identities) != 1:
-            raise ImportBlocked(
-                "Neue Serie konnte über Jellyfin nicht eindeutig mit Provider-ID bestimmt werden"
-            )
-        return next(iter(identities.values()))
+        return list(identities.values())
 
     def _ensure_episode_absent(
         self,
@@ -650,6 +819,41 @@ class MediaImporter:
 
 class ImportBlocked(RuntimeError):
     pass
+
+
+class ImportSelectionRequired(ImportBlocked):
+    pass
+
+
+class ImportWaiting(ImportBlocked):
+    pass
+
+
+def _provider_id(series: RemoteSeries, provider: str) -> str | None:
+    return next(
+        (value for key, value in series.provider_ids if key.casefold() == provider),
+        None,
+    )
+
+
+def _imdb_url(series: RemoteSeries) -> str | None:
+    imdb_id = _provider_id(series, "imdb")
+    if imdb_id and re.fullmatch(r"tt\d{7,10}", imdb_id, re.IGNORECASE):
+        return f"https://www.imdb.com/title/{imdb_id.lower()}/"
+    return None
+
+
+def _choice_key(series: RemoteSeries) -> str:
+    payload = json.dumps(
+        [
+            normalize_title(series.name),
+            series.production_year,
+            sorted((key.casefold(), value.casefold()) for key, value in series.provider_ids),
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _signature(path: Path) -> str:

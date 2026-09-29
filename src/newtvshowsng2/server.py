@@ -6,8 +6,9 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
+from .media_importer import SelectionUnavailable
 from .rendering import LogRenderer
 from .scanner import Scanner
 from .storage import Storage
@@ -39,11 +40,15 @@ class RequestHandler(BaseHTTPRequestHandler):
     server: ApplicationServer
 
     def do_POST(self) -> None:
-        if self.path not in ("/run/feed", "/run/import", "/run/income-scan"):
+        if self.path not in (
+            "/run/feed", "/run/import", "/run/income-scan", "/run/import/resolve"
+        ):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         scanner = self.server.scanner
-        income_action = self.path in ("/run/import", "/run/income-scan")
+        income_action = self.path in (
+            "/run/import", "/run/income-scan", "/run/import/resolve"
+        )
         if scanner is None or (
             income_action
             and (not scanner.config.media_import_enabled or scanner.importer is None)
@@ -52,6 +57,9 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
         if not self._same_origin_request():
             self.send_error(HTTPStatus.FORBIDDEN, "Fremder Ursprung ist nicht erlaubt")
+            return
+        if self.path == "/run/import/resolve":
+            self._start_selected_import()
             return
         try:
             result = (
@@ -70,6 +78,43 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header(
             "Location", "/#overview" if self.path == "/run/feed" else "/#media-import"
         )
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _start_selected_import(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 1 <= length <= 4096 or self.headers.get("Content-Type", "").split(";", 1)[0] != "application/x-www-form-urlencoded":
+                raise ValueError("Ungültiges Auswahlformular")
+            fields = parse_qs(
+                self.rfile.read(length).decode("utf-8"),
+                strict_parsing=True,
+                max_num_fields=3,
+            )
+            source, signature, choice = (
+                fields[name][0] if len(fields.get(name, [])) == 1 else ""
+                for name in ("source", "signature", "choice")
+            )
+            if not source or not signature or not choice:
+                raise ValueError("Auswahlformular ist unvollständig")
+        except (UnicodeError, ValueError) as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+        try:
+            started = self.server.scanner.start_selected_import(source, signature, choice)
+        except SelectionUnavailable as exc:
+            self.send_error(HTTPStatus.CONFLICT, str(exc))
+            return
+        except Exception:
+            LOGGER.exception("Serienauswahl konnte nicht gestartet werden")
+            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Serienimport konnte nicht gestartet werden")
+            return
+        if not started:
+            self.send_error(HTTPStatus.CONFLICT, "Ein anderer Lauf ist bereits aktiv")
+            return
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self.send_header("Location", "/#media-import")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", "0")
         self.end_headers()
@@ -102,8 +147,44 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._serve_favicon()
         elif path == "/healthz":
             self._serve_health()
+        elif path == "/media-import/resolve":
+            self._serve_selection()
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
+
+    def _serve_selection(self) -> None:
+        scanner = self.server.scanner
+        if scanner is None or not scanner.config.media_import_enabled or scanner.importer is None:
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        query = parse_qs(urlsplit(self.path).query)
+        source = query.get("source", [])
+        if len(source) != 1:
+            self.send_error(HTTPStatus.BAD_REQUEST, "Income-Eintrag fehlt")
+            return
+        try:
+            options = scanner.importer.selection_options(source[0])
+            content = scanner.renderer.render_selection(options).encode("utf-8")
+        except SelectionUnavailable as exc:
+            self.send_error(HTTPStatus.CONFLICT, str(exc))
+            return
+        except Exception:
+            LOGGER.exception("Serienauswahl konnte nicht geladen werden")
+            self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Serienauswahl konnte nicht geladen werden")
+            return
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; "
+            "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+        )
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.end_headers()
+        self.wfile.write(content)
 
     def _serve_index(self) -> None:
         try:

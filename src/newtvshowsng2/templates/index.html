@@ -234,10 +234,16 @@
                     </td>
                     <td class="status-col" data-label="Status">
                       {% if item.status == 'transferred' %}<span class="badge done">Übernommen</span>
+                      {% elif item.status == 'needs_selection' %}<span class="badge blocked">Serienzuordnung wählen</span>
                       {% elif item.status == 'blocked' %}<span class="badge blocked">Blockiert</span>
                       {% else %}<span class="badge warning">Wartet</span>{% endif %}
                     </td>
-                    <td class="date-col" data-label="Details">{{ item.reason or 'Wartet auf Importprüfung' }}</td>
+                    <td class="date-col" data-label="Details">
+                      {{ item.reason or 'Wartet auf Importprüfung' }}
+                      {% if media_import_enabled and item.status == 'needs_selection' %}
+                        <br><a href="/media-import/resolve?source={{ item.source_path | urlencode }}">Jellyfin-Treffer prüfen und Serie wählen</a>
+                      {% endif %}
+                    </td>
                   </tr>
                 {% endfor %}
               </tbody>
