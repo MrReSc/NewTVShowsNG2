@@ -121,7 +121,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             "form-action 'self'; frame-ancestors 'none'",
         )
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Referrer-Policy", "same-origin")
         self.end_headers()
         self.wfile.write(content)
 

@@ -185,6 +185,15 @@ def test_manual_run_endpoints_accept_same_origin_and_reject_other_origins(tmp_pa
 
     try:
         origin = f"http://127.0.0.1:{server.server_address[1]}"
+        connection = http.client.HTTPConnection(*server.server_address, timeout=3)
+        try:
+            connection.request("GET", "/")
+            response = connection.getresponse()
+            assert response.status == 200
+            assert response.getheader("Referrer-Policy") == "same-origin"
+            response.read()
+        finally:
+            connection.close()
         assert request("POST", "/run/feed", {"Origin": origin})[:2] == (303, "/#overview")
         assert request("POST", "/run/import", {"Origin": origin})[:2] == (303, "/#media-import")
         assert request("POST", "/run/income-scan", {"Origin": origin})[:2] == (303, "/#media-import")
