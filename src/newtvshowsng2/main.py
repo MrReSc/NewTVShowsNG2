@@ -26,9 +26,11 @@ def main() -> None:
 
     storage = Storage(config.database_path)
     storage.initialize()
-    renderer = Renderer(storage, config.output_path, config.timezone)
-    if not config.output_path.exists():
-        renderer.render()
+    storage.recover_interrupted_manual_import()
+    renderer = Renderer(
+        storage, config.output_path, config.timezone, config.media_import_enabled
+    )
+    renderer.render()
 
     scanner = Scanner(config, storage, renderer)
     stop_event = threading.Event()
@@ -48,6 +50,7 @@ def main() -> None:
         storage,
         config.log_path,
         config.timezone,
+        scanner,
     )
 
     def stop(_signum: int, _frame: object) -> None:

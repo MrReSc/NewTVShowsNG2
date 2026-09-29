@@ -98,6 +98,29 @@ def test_existing_series_release_folder_moves_after_stability_window(tmp_path) -
     assert row["target_path"].startswith("Bookie (2023)/Staffel 02/")
 
 
+def test_forced_import_skips_stability_window_but_checks_source_changes(tmp_path) -> None:
+    jellyfin = Jellyfin()
+    config, storage, importer = setup(tmp_path, jellyfin)
+    series_folder = config.shows_dir / "Bookie (2023)"
+    series_folder.mkdir()
+    source = config.income_dir / "Bookie.S02E09.German.mkv"
+    source.write_bytes(b"first")
+    library = Library(
+        [Series("bookie", "Bookie", production_year=2023, path="/media/tv/Bookie (2023)")]
+    )
+    started = datetime(2026, 9, 28, 10, tzinfo=UTC)
+
+    assert importer.run(library, started).waiting == 1
+    source.write_bytes(b"changed")
+    result = importer.run(library, started + timedelta(minutes=1), force=True)
+
+    assert result.transferred == 1
+    assert result.waiting == 0
+    assert not source.exists()
+    assert (series_folder / "Staffel 02" / source.name).read_bytes() == b"changed"
+    assert storage.media_imports()[0]["status"] == "transferred"
+
+
 def test_new_series_requires_one_exact_provider_match(tmp_path) -> None:
     remote = RemoteSeries("New Show", 2026, (("Imdb", "tt1234567"),))
     jellyfin = Jellyfin([remote])
@@ -452,8 +475,9 @@ def test_conflicting_remote_provider_ids_block_existing_series(tmp_path) -> None
     assert "widersprüchliche Provider-IDs" in storage.media_imports()[0]["reason"]
 
 
+@pytest.mark.parametrize("force", [False, True])
 def test_checksum_mismatch_keeps_source_and_creates_no_target(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, force
 ) -> None:
     jellyfin = Jellyfin()
     config, storage, importer = setup(tmp_path, jellyfin)
@@ -469,7 +493,8 @@ def test_checksum_mismatch_keeps_source_and_creates_no_target(
         Path(destination).write_bytes(b"xxxxxxx")
 
     monkeypatch.setattr(media_importer_module.shutil, "copy2", corrupt_copy)
-    result = importer.run(library, started + timedelta(hours=1))
+    elapsed = timedelta(minutes=1) if force else timedelta(hours=1)
+    result = importer.run(library, started + elapsed, force=force)
 
     assert result.blocked == 1
     assert source.read_bytes() == b"correct"

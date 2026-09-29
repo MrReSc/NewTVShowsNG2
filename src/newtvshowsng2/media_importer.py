@@ -77,7 +77,9 @@ class MediaImporter:
         self.storage = storage
         self.jellyfin = jellyfin
 
-    def run(self, library: Library, now: datetime | None = None) -> ImportRunResult:
+    def run(
+        self, library: Library, now: datetime | None = None, *, force: bool = False
+    ) -> ImportRunResult:
         now = now or datetime.now(UTC)
         self._validate_mounts()
         self._validate_jellyfin_root()
@@ -133,7 +135,7 @@ class MediaImporter:
                     if existing_target is not None and existing_target.exists():
                         continue
             stable_at = first_seen + timedelta(hours=self.config.import_stable_hours)
-            if changed or now < stable_at:
+            if not force and (changed or now < stable_at):
                 self.storage.update_media_import(
                     relative,
                     "waiting",

@@ -6,8 +6,10 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from .rendering import LogRenderer
+from .scanner import Scanner
 from .storage import Storage
 
 LOGGER = logging.getLogger(__name__)
@@ -24,15 +26,65 @@ class ApplicationServer(ThreadingHTTPServer):
         storage: Storage,
         log_path: Path,
         timezone: str,
+        scanner: Scanner | None = None,
     ):
         super().__init__(address, RequestHandler)
         self.output_path = output_path
         self.storage = storage
         self.log_renderer = LogRenderer(log_path, timezone)
+        self.scanner = scanner
 
 
 class RequestHandler(BaseHTTPRequestHandler):
     server: ApplicationServer
+
+    def do_POST(self) -> None:
+        if self.path not in ("/run/feed", "/run/import"):
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        scanner = self.server.scanner
+        kind = "feed" if self.path == "/run/feed" else "import"
+        if scanner is None or (
+            kind == "import"
+            and (not scanner.config.media_import_enabled or scanner.importer is None)
+        ):
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        if not self._same_origin_request():
+            self.send_error(HTTPStatus.FORBIDDEN, "Fremder Ursprung ist nicht erlaubt")
+            return
+        try:
+            started = scanner.start_manual(kind)
+        except Exception:
+            LOGGER.exception("Manueller %s-Lauf konnte nicht gestartet werden", kind)
+            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Lauf konnte nicht gestartet werden")
+            return
+        if not started:
+            self.send_error(HTTPStatus.CONFLICT, "Ein anderer Lauf ist bereits aktiv")
+            return
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self.send_header("Location", "/#overview" if kind == "feed" else "/#media-import")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _same_origin_request(self) -> bool:
+        fetch_site = self.headers.get("Sec-Fetch-Site", "").lower()
+        if fetch_site in ("cross-site", "same-site"):
+            return False
+        origin = self.headers.get("Origin")
+        referer = self.headers.get("Referer")
+        if origin is None and referer is None:
+            return fetch_site == "same-origin"
+        origin = origin or referer
+        if origin is None:
+            return False
+        parsed = urlsplit(origin)
+        return (
+            parsed.scheme == "http"
+            and parsed.netloc == self.headers.get("Host")
+            and (not self.headers.get("Origin") or parsed.path == "")
+        )
 
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
@@ -60,7 +112,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header(
             "Content-Security-Policy",
             "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; "
-            "form-action 'none'; frame-ancestors 'none'",
+            "form-action 'self'; frame-ancestors 'none'",
         )
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")

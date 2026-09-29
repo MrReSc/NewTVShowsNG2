@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% if state.get('scan_status') == 'running' or state.get('manual_import_status') == 'running' %}<meta http-equiv="refresh" content="3">{% endif %}
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#121212">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -61,6 +62,11 @@
     .nav { position: sticky; z-index: 5; top: 0; display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; padding: 12px 0; border-bottom: 1px solid var(--border); background: #121212f2; backdrop-filter: blur(14px); }
     .nav a { padding: 9px 13px; border: 1px solid #292929; border-radius: 5px; background: #101010; color: var(--text); font: .82rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-decoration: none; }
     .nav a:hover { color: var(--text); background: var(--surface-hover); }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: -6px 0 22px; }
+    .actions form { margin: 0; }
+    .actions button { padding: 9px 13px; border: 1px solid #3d6661; border-radius: 5px; background: var(--accent-soft); color: var(--link); font: 750 .82rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; cursor: pointer; }
+    .actions button:hover { background: #17433e; }
+    .actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     .nav a[href="#overview"],
     body:has(#history:target) .nav a[href="#history"],
     body:has(#media-import:target) .nav a[href="#media-import"] { border-color: #f5f5f5; background: var(--text); color: #121212; }
@@ -70,6 +76,8 @@
     .alert { margin: 0 0 18px; padding: 13px 16px; border: 1px solid #735b32; border-radius: 11px; background: var(--warning-soft); color: #f5dfb7; }
     .alert.error { border-color: #784641; background: var(--danger-soft); color: #f5c4c0; }
     .alert strong { display: block; margin-bottom: 2px; }
+    .alert.details { white-space: pre-line; }
+    .alert ul { margin: 6px 0 0; padding-left: 20px; }
     .tab-anchor { position: fixed; top: 0; left: 0; width: 0; height: 0; overflow: hidden; pointer-events: none; }
     .view { display: none; }
     #overview-view { display: block; }
@@ -160,6 +168,10 @@
       <a href="#media-import">Medienimport</a>
       <a href="/log">Log</a>
     </nav>
+    <div class="actions" aria-label="Manuelle Läufe">
+      <form method="post" action="/run/feed"><button type="submit">Feed jetzt abgleichen</button></form>
+      {% if media_import_enabled %}<form method="post" action="/run/import"><button type="submit">Dateien jetzt einsortieren</button></form>{% endif %}
+    </div>
     <span class="tab-anchor" id="overview" aria-hidden="true"></span>
     <span class="tab-anchor" id="history" aria-hidden="true"></span>
     <span class="tab-anchor" id="media-import" aria-hidden="true"></span>
@@ -168,6 +180,23 @@
       <div class="alert error" role="alert">
         <strong>Der letzte Scan ist fehlgeschlagen.</strong>
         {{ state.get('last_error') }} Die zuletzt gespeicherten Ergebnisse bleiben sichtbar.
+      </div>
+    {% endif %}
+
+    {% if state.get('scan_origin') == 'manual' and scan_status != 'error' %}
+      <div class="alert{% if scan_status == 'warning' %} details{% endif %}" role="status">
+        <strong>{% if scan_status == 'running' %}Feed-Abgleich läuft{% elif scan_status == 'warning' %}Feed-Abgleich mit Warnungen abgeschlossen{% else %}Feed-Abgleich abgeschlossen{% endif %}</strong>
+        {% if scan_status == 'running' %}Die Seite aktualisiert sich automatisch.{% else %}{{ state.get('last_scan_at') | local_datetime }}{% endif %}
+        {% if scan_status == 'warning' and feed_warnings %}<ul>{% for warning in feed_warnings %}<li>{{ warning }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+    {% endif %}
+
+    {% if state.get('manual_import_status') %}
+      {% set import_status = state.get('manual_import_status') %}
+      <div class="alert{% if import_status == 'error' %} error{% endif %} details" role="status">
+        <strong>{% if import_status == 'running' %}Manuelles Einsortieren läuft{% elif import_status == 'error' %}Manuelles Einsortieren fehlgeschlagen{% else %}Manuelles Einsortieren abgeschlossen{% endif %}</strong>
+        {% if import_status == 'running' %}Die Seite aktualisiert sich automatisch.{% else %}{{ state.get('manual_import_finished_at') | local_datetime }}{% if state.get('manual_import_summary') %} · {{ state.get('manual_import_summary') }}{% endif %}{% endif %}
+        {% if state.get('manual_import_error') %}{{ state.get('manual_import_error') }}{% endif %}
       </div>
     {% endif %}
 

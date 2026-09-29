@@ -97,45 +97,102 @@ class Storage:
                 "ON announcements(feed_item_key)"
             )
 
-    def begin_scan(self, started_at: datetime, next_run_at: datetime) -> None:
+    def begin_scan(
+        self, started_at: datetime, next_run_at: datetime | None, *, manual: bool = False
+    ) -> None:
         with self._connect() as connection:
             connection.execute("UPDATE announcements SET is_new = 0")
+            values = {
+                "scan_status": "running",
+                "scan_origin": "manual" if manual else "automatic",
+                "scan_started_at": _iso(started_at),
+                "last_error": "",
+                "feed_errors": "[]",
+            }
+            if next_run_at is not None:
+                values["next_run_at"] = _iso(next_run_at)
+            self._set_many(connection, values)
+
+    def complete_scan(
+        self, completed_at: datetime, next_run_at: datetime | None, feed_errors: list[str]
+    ) -> None:
+        with self._connect() as connection:
+            values = {
+                "scan_status": "warning" if feed_errors else "ok",
+                "last_success_at": _iso(completed_at),
+                "last_scan_at": _iso(completed_at),
+                "last_error": "",
+                "feed_errors": json.dumps(feed_errors, ensure_ascii=False),
+            }
+            if next_run_at is not None:
+                values["next_run_at"] = _iso(next_run_at)
+            self._set_many(connection, values)
+
+    def fail_scan(
+        self, failed_at: datetime, next_run_at: datetime | None, error: str
+    ) -> None:
+        with self._connect() as connection:
+            values = {
+                "scan_status": "error",
+                "last_scan_at": _iso(failed_at),
+                "last_error": error,
+            }
+            if next_run_at is not None:
+                values["next_run_at"] = _iso(next_run_at)
+            self._set_many(connection, values)
+
+    def begin_manual_import(self, started_at: datetime) -> None:
+        with self._connect() as connection:
             self._set_many(
                 connection,
                 {
-                    "scan_status": "running",
-                    "scan_started_at": _iso(started_at),
-                    "next_run_at": _iso(next_run_at),
-                    "last_error": "",
-                    "feed_errors": "[]",
+                    "manual_import_status": "running",
+                    "manual_import_started_at": _iso(started_at),
+                    "manual_import_error": "",
+                    "manual_import_summary": "",
                 },
             )
 
-    def complete_scan(
-        self, completed_at: datetime, next_run_at: datetime, feed_errors: list[str]
+    def recover_interrupted_manual_import(self) -> None:
+        with self._connect() as connection:
+            status = connection.execute(
+                "SELECT value FROM app_state WHERE key = 'manual_import_status'"
+            ).fetchone()
+            if status is not None and status["value"] == "running":
+                self._set_many(
+                    connection,
+                    {
+                        "manual_import_status": "error",
+                        "manual_import_finished_at": _iso(datetime.now(UTC)),
+                        "manual_import_error": (
+                            "Der manuelle Import wurde durch einen Neustart unterbrochen; "
+                            "Dateien und Jellyfin-Status bitte prüfen"
+                        ),
+                    },
+                )
+
+    def complete_manual_import(
+        self, completed_at: datetime, summary: str, warnings: list[str]
     ) -> None:
         with self._connect() as connection:
             self._set_many(
                 connection,
                 {
-                    "scan_status": "warning" if feed_errors else "ok",
-                    "last_success_at": _iso(completed_at),
-                    "last_scan_at": _iso(completed_at),
-                    "next_run_at": _iso(next_run_at),
-                    "last_error": "",
-                    "feed_errors": json.dumps(feed_errors, ensure_ascii=False),
+                    "manual_import_status": "warning" if warnings else "ok",
+                    "manual_import_finished_at": _iso(completed_at),
+                    "manual_import_summary": summary,
+                    "manual_import_error": "\n".join(warnings),
                 },
             )
 
-    def fail_scan(self, failed_at: datetime, next_run_at: datetime, error: str) -> None:
+    def fail_manual_import(self, failed_at: datetime, error: str) -> None:
         with self._connect() as connection:
             self._set_many(
                 connection,
                 {
-                    "scan_status": "error",
-                    "last_scan_at": _iso(failed_at),
-                    "next_run_at": _iso(next_run_at),
-                    "last_error": error,
+                    "manual_import_status": "error",
+                    "manual_import_finished_at": _iso(failed_at),
+                    "manual_import_error": error,
                 },
             )
 

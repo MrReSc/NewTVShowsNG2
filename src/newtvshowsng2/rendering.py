@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import tempfile
@@ -40,11 +41,15 @@ QUALITY_DETAILS = {
 
 
 class Renderer:
-    def __init__(self, storage: Storage, output_path: Path, timezone: str) -> None:
+    def __init__(
+        self, storage: Storage, output_path: Path, timezone: str,
+        media_import_enabled: bool = False,
+    ) -> None:
         self.storage = storage
         self.output_path = output_path
         self.favicon_path = output_path.with_name("favicon.svg")
         self.timezone = ZoneInfo(timezone)
+        self.media_import_enabled = media_import_enabled
         self.environment = Environment(
             loader=PackageLoader("newtvshowsng2", "templates"),
             autoescape=select_autoescape(("html", "xml")),
@@ -59,12 +64,18 @@ class Renderer:
         history = self.storage.announcements()
         media_imports = self.storage.media_imports()
         state = self.storage.state()
+        try:
+            feed_warnings = json.loads(state.get("feed_errors", "[]"))
+        except json.JSONDecodeError:
+            feed_warnings = []
 
         html = self.environment.get_template("index.html").render(
             current=current,
             history=history,
             media_imports=media_imports,
             state=state,
+            feed_warnings=feed_warnings,
+            media_import_enabled=self.media_import_enabled,
             generated_at=datetime.now(UTC),
         )
         self._atomic_write(self.output_path, html)
