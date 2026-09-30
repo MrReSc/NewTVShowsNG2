@@ -68,6 +68,15 @@
     .actions button:hover { background: #17433e; }
     .actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     .action-status { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px 18px; margin-left: auto; color: var(--muted); font-size: .78rem; text-align: right; }
+    .history-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin: -6px 0 18px; padding: 0; border: 0; }
+    .history-filters legend { margin-bottom: 7px; color: var(--muted); font-size: .78rem; }
+    .history-filters label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: .85rem; }
+    .history-filters input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); }
+    .history-filter-empty { display: none; }
+    #history-view:has(#history-filter-feed:not(:checked)) .history-feed,
+    #history-view:has(#history-filter-import:not(:checked)) .history-import { display: none; }
+    #history-view:has(#history-filter-feed:not(:checked)):has(#history-filter-import:not(:checked)) .history-panel { display: none; }
+    #history-view:has(#history-filter-feed:not(:checked)):has(#history-filter-import:not(:checked)) .history-filter-empty { display: block; }
     .nav a[href="#overview"],
     body:has(#history:target) .nav a[href="#history"],
     body:has(#media-import:target) .nav a[href="#media-import"] { border-color: #f5f5f5; background: var(--text); color: #121212; }
@@ -280,7 +289,7 @@
             </thead>
             <tbody>
               {% for row in rows %}
-                <tr{% if not current_panel and row.kind == 'import' %} class="history-import"{% endif %}>
+                <tr{% if not current_panel %} class="history-{{ row.kind }}"{% endif %}>
                   {% if not current_panel and row.kind == 'import' %}
                     <td class="release" data-label="Eintrag">{{ type_marker('import') }}<span class="release-title">{{ row.source_path }}</span></td>
                     <td class="inventory" data-label="Bestand / Ziel">
@@ -370,7 +379,7 @@
         <div>
           <h1 id="history-title">Historie</h1>
         </div>
-        <span class="count">{{ history | length }} Einträge</span>
+        <span class="count">{{ history | length }} Einträge gesamt</span>
       </div>
       <div class="actions" aria-label="Feed-Status">
         <div class="action-status">
@@ -378,7 +387,15 @@
           <span class="next-run">Nächster Lauf: {{ state.get('next_run_at') | local_datetime }}</span>
         </div>
       </div>
-      <div class="panel">{{ release_table(history) }}</div>
+      {% if history %}
+      <fieldset class="history-filters">
+        <legend>Einträge anzeigen</legend>
+        <label><input id="history-filter-feed" type="checkbox" checked> Feed</label>
+        <label><input id="history-filter-import" type="checkbox" checked> Import</label>
+      </fieldset>
+      {% endif %}
+      <div class="panel history-panel">{{ release_table(history) }}</div>
+      <div class="panel empty history-filter-empty"><strong>Keine Art ausgewählt</strong><span>Aktiviere Feed oder Import, um Einträge anzuzeigen.</span></div>
     </section>
 
     <footer>Erzeugt am {{ generated_at | local_datetime }}</footer>

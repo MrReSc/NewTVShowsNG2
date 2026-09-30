@@ -411,6 +411,13 @@ def test_open_imports_and_transfers_render_in_separate_views_with_timeline(tmp_p
         < history_html.index("older.mkv")
     )
     assert history_html.count('class="type-marker"') == 3
+    assert '<input id="history-filter-feed" type="checkbox" checked>' in history_html
+    assert '<input id="history-filter-import" type="checkbox" checked>' in history_html
+    assert history_html.count('class="history-feed"') == 1
+    assert history_html.count('class="history-import"') == 2
+    assert "Keine Art ausgewählt" in history_html
+    assert "#history-view:has(#history-filter-feed:not(:checked)) .history-feed" in html
+    assert "#history-view:has(#history-filter-import:not(:checked)) .history-import" in html
     assert "Show/Staffel 01/newer.mkv" in history_html
     assert "S01E02" in history_html
     assert "Übernommen" in history_html
