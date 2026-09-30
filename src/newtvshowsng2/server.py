@@ -160,7 +160,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         query = parse_qs(urlsplit(self.path).query)
         source = query.get("source", [])
         if len(source) != 1:
-            self.send_error(HTTPStatus.BAD_REQUEST, "Income-Eintrag fehlt")
+            self.send_error(HTTPStatus.BAD_REQUEST, "Download-Eintrag fehlt")
             return
         try:
             options = scanner.importer.selection_options(source[0])

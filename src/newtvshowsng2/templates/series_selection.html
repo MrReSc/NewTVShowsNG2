@@ -7,10 +7,11 @@
   <title>Serienzuordnung · NewTVShowsNG2</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <style>
-    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; --link: #53e4d3; --visited: #c4a0f7; }
     body { margin: 0; background: #121212; color: #f5f5f5; line-height: 1.5; }
     main { width: min(820px, calc(100% - 32px)); margin: 32px auto 64px; }
-    a { color: #53e4d3; text-underline-offset: 3px; }
+    a { color: var(--link); text-underline-offset: 3px; }
+    a:visited { color: var(--visited); }
     a:focus-visible, button:focus-visible { outline: 2px solid #00d8c1; outline-offset: 3px; }
     h1 { font-size: 1.45rem; margin: 22px 0 8px; }
     p { color: #a9a9a9; }
@@ -28,7 +29,7 @@
   <main>
     <a href="/#media-import">← Zurück zum Medienimport</a>
     <h1>Serienzuordnung wählen</h1>
-    <p class="source">Income: {{ options.source_path }}</p>
+    <p class="source">Download: {{ options.source_path }}</p>
     <p>Prüfe den passenden Jellyfin-Treffer. Die Auswahl importiert alle aktuell gefundenen Folgen dieser Serie sofort. Weitere Folgen werden nach der Übernahme durch Jellyfin zugeordnet.</p>
     {% for choice in options.choices %}
       <section class="choice">

@@ -22,7 +22,7 @@
       --accent: #00d8c1;
       --accent-soft: #0c302d;
       --link: #53e4d3;
-      --visited: #a5c9c4;
+      --visited: #c4a0f7;
       --success: #a7dba7;
       --success-soft: #1d3627;
       --warning: #edc683;
@@ -88,7 +88,6 @@
     body:has(#media-import:target) #media-import-view { display: block; }
     .section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
     .section-heading h1 { margin: 0; font: 400 1.25rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: -.03em; }
-    .section-note { margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
     .count { flex: 0 0 auto; padding: 5px 9px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font: .73rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     .panel { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
     .panel.current { border-color: #3d6661; }
@@ -99,14 +98,18 @@
     tbody tr:last-child td { border-bottom: 0; }
     tbody tr:hover { background: var(--surface-hover); }
     .release { width: 46%; overflow-wrap: anywhere; font-size: .9rem; font-weight: 650; }
-    .release a { color: var(--text); text-decoration-color: #666; }
+    .release a { color: var(--link); }
     .release a:visited { color: var(--visited); }
     .release-title { display: block; }
     .variant-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     .variant-links a { padding: 3px 9px; border: 1px solid #3d6661; border-radius: 5px; color: var(--link); font-size: .73rem; font-weight: 750; text-decoration: none; }
+    .variant-links a:visited { color: var(--visited); border-color: #73568e; }
     .variant-links a:hover { background: var(--accent-soft); }
+    .type-marker { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 5px; color: var(--muted); font-size: .7rem; font-weight: 750; }
+    .type-marker svg { width: 14px; height: 14px; flex: 0 0 auto; }
     .inventory { width: 20%; white-space: nowrap; }
     .inventory small { display: block; margin-top: 2px; color: var(--muted); }
+    .history-import .inventory { white-space: normal; overflow-wrap: anywhere; }
     .status-col { width: 14%; }
     .date-col { width: 20%; color: var(--muted); }
     .badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -162,9 +165,9 @@
       <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">N</span>NewTVShowsNG2</a>
     </header>
     <nav class="nav" aria-label="Ansichten">
-      <a href="#overview">Übersicht</a>
-      <a href="#history">Historie</a>
+      <a href="#overview">Feed</a>
       <a href="#media-import">Medienimport</a>
+      <a href="#history">Historie</a>
       <a href="/log">Log</a>
     </nav>
     <span class="tab-anchor" id="overview" aria-hidden="true"></span>
@@ -175,13 +178,12 @@
       <div class="section-heading">
         <div>
           <h1 id="media-import-title">Medienimport</h1>
-          <p class="section-note">Dateien aus Income, ihre Zuordnung und das vorgesehene Ziel.</p>
         </div>
         <span class="count">{{ media_imports | length }} Einträge</span>
       </div>
       {% if media_import_enabled %}
         <div class="actions" aria-label="Medienimport-Aktionen">
-          <form method="post" action="/run/income-scan"><button type="submit">Income jetzt scannen</button></form>
+          <form method="post" action="/run/income-scan"><button type="submit">Download jetzt scannen</button></form>
           <form method="post" action="/run/import"><button type="submit">Dateien jetzt einsortieren</button></form>
           <div class="action-status">
             {% if import_status == 'running' %}<span class="scan-state running">Import läuft</span>
@@ -212,7 +214,7 @@
       {% endif %}
       {% if state.get('income_scan_error') %}
         <div class="alert error" role="alert">
-          <strong>Income-Scan fehlgeschlagen</strong>
+          <strong>Download-Scan fehlgeschlagen</strong>
           {{ state.get('income_scan_error') }}
         </div>
       {% endif %}
@@ -233,8 +235,7 @@
                       {% if item.parsed_title %}<small>{{ item.parsed_title }}</small>{% endif %}
                     </td>
                     <td class="status-col" data-label="Status">
-                      {% if item.status == 'transferred' %}<span class="badge done">Übernommen</span>
-                      {% elif item.status == 'needs_selection' %}<span class="badge blocked">Serienzuordnung wählen</span>
+                      {% if item.status == 'needs_selection' %}<span class="badge blocked">Serienzuordnung wählen</span>
                       {% elif item.status == 'blocked' %}<span class="badge blocked">Blockiert</span>
                       {% else %}<span class="badge warning">Wartet</span>{% endif %}
                     </td>
@@ -250,10 +251,20 @@
             </table>
           </div>
         {% else %}
-          <div class="empty"><strong>Keine Dateien erkannt</strong><span>Income ist leer oder wurde noch nicht gescannt.</span></div>
+          <div class="empty"><strong>Keine offenen Importe</strong><span>Download ist leer oder wurde noch nicht gescannt.</span></div>
         {% endif %}
       </div>
     </section>
+
+    {% macro type_marker(kind) %}
+      <span class="type-marker">
+        {% if kind == 'feed' %}
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="3" cy="13" r="1" fill="currentColor" stroke="none"/><path d="M2 7a7 7 0 0 1 7 7M2 2a12 12 0 0 1 12 12"/></svg>Feed
+        {% else %}
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8m-3-3 3 3 3-3M2 11v3h12v-3"/></svg>Import
+        {% endif %}
+      </span>
+    {% endmacro %}
 
     {% macro release_table(rows, current_panel=false) %}
       {% if rows %}
@@ -261,46 +272,57 @@
           <table>
             <thead>
               <tr>
-                <th class="release">Release</th>
-                <th class="inventory">Bestand</th>
+                <th class="release">{% if current_panel %}Release{% else %}Eintrag{% endif %}</th>
+                <th class="inventory">{% if current_panel %}Bestand{% else %}Bestand / Ziel{% endif %}</th>
                 <th class="status-col">Status</th>
                 <th class="date-col">Datum</th>
               </tr>
             </thead>
             <tbody>
               {% for row in rows %}
-                <tr>
-                  <td class="release" data-label="Release">
-                    {% if current_panel %}
-                      <span class="release-title">{{ row.display_title }}</span>
-                      <span class="variant-links">
-                        {% for variant in row.variants %}
-                          <a href="{{ variant.link }}" title="{{ variant.title }}" target="_blank" rel="noopener noreferrer">{{ variant.label }}</a>
-                        {% endfor %}
-                      </span>
-                    {% else %}
-                      <a href="{{ row.link }}" title="{{ row.title }}" target="_blank" rel="noopener noreferrer">{{ row.matched_series_name }} · S{{ "%02d" | format(row.season) }}{% if row.episode is not none %}E{{ "%02d" | format(row.episode) }}{% endif %}</a>
-                    {% endif %}
-                  </td>
-                  <td class="inventory" data-label="Bestand">
-                    {{ row.jellyfin_episode_count or 0 }} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %} vorhanden
-                    <small>{% if row.jellyfin_played_episode_count is not none %}{{ row.jellyfin_played_episode_count }}{% else %}?{% endif %} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %} gesehen</small>
-                    <small>Episoden in S{{ "%02d" | format(row.season) }}</small>
-                    {% if row.needed_episodes %}
-                      <small>Noch benötigt: {% for number in row.needed_episodes %}E{{ "%02d" | format(number) }}{% if not loop.last %}, {% endif %}{% endfor %}</small>
-                    {% elif row.is_current and row.episode is none %}
-                      <small>Sollbestand unbekannt</small>
-                    {% endif %}
-                  </td>
-                  <td class="status-col" data-label="Status">
-                    <div class="badge-row">
-                      {% if row.is_new %}<span class="badge new">Neu</span>{% endif %}
-                      {% if row.is_current %}<span class="badge open">Fehlend</span>
-                      {% else %}<span class="badge done">{{ {"available": "Vorhanden", "played": "Gesehen", "covered": "Vorhanden/gesehen", "removed": "Serie nicht mehr vorhanden"}.get(row.status_reason, "Status noch nicht geprüft") }}</span>{% endif %}
-                      {% if row.match_warning %}<span class="badge warning">Zuordnung prüfen</span>{% endif %}
-                    </div>
-                  </td>
-                  <td class="date-col" data-label="Datum">{{ row.published_at | local_datetime }}</td>
+                <tr{% if not current_panel and row.kind == 'import' %} class="history-import"{% endif %}>
+                  {% if not current_panel and row.kind == 'import' %}
+                    <td class="release" data-label="Eintrag">{{ type_marker('import') }}<span class="release-title">{{ row.source_path }}</span></td>
+                    <td class="inventory" data-label="Bestand / Ziel">
+                      {{ row.target_path or '–' }}
+                      <small>{% if row.season is not none and row.episode is not none %}S{{ "%02d" | format(row.season) }}E{{ "%02d" | format(row.episode) }}{% else %}Episode unbekannt{% endif %}{% if row.parsed_title %} · {{ row.parsed_title }}{% endif %}</small>
+                    </td>
+                    <td class="status-col" data-label="Status"><span class="badge done">Übernommen</span></td>
+                    <td class="date-col" data-label="Datum">{{ row.history_at | local_datetime }}</td>
+                  {% else %}
+                    <td class="release" data-label="{% if current_panel %}Release{% else %}Eintrag{% endif %}">
+                      {% if current_panel %}
+                        <span class="release-title">{{ row.display_title }}</span>
+                        <span class="variant-links">
+                          {% for variant in row.variants %}
+                            <a href="{{ variant.link }}" title="{{ variant.title }}" target="_blank" rel="noopener noreferrer">{{ variant.label }}</a>
+                          {% endfor %}
+                        </span>
+                      {% else %}
+                        {{ type_marker('feed') }}
+                        <span class="release-title"><a href="{{ row.link }}" title="{{ row.title }}" target="_blank" rel="noopener noreferrer">{{ row.matched_series_name }} · S{{ "%02d" | format(row.season) }}{% if row.episode is not none %}E{{ "%02d" | format(row.episode) }}{% endif %}</a></span>
+                      {% endif %}
+                    </td>
+                    <td class="inventory" data-label="{% if current_panel %}Bestand{% else %}Bestand / Ziel{% endif %}">
+                      {{ row.jellyfin_episode_count or 0 }} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %} vorhanden
+                      <small>{% if row.jellyfin_played_episode_count is not none %}{{ row.jellyfin_played_episode_count }}{% else %}?{% endif %} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %} gesehen</small>
+                      <small>Episoden in S{{ "%02d" | format(row.season) }}</small>
+                      {% if row.needed_episodes %}
+                        <small>Noch benötigt: {% for number in row.needed_episodes %}E{{ "%02d" | format(number) }}{% if not loop.last %}, {% endif %}{% endfor %}</small>
+                      {% elif row.is_current and row.episode is none %}
+                        <small>Sollbestand unbekannt</small>
+                      {% endif %}
+                    </td>
+                    <td class="status-col" data-label="Status">
+                      <div class="badge-row">
+                        {% if row.is_new %}<span class="badge new">Neu</span>{% endif %}
+                        {% if row.is_current %}<span class="badge open">Fehlend</span>
+                        {% else %}<span class="badge done">{{ {"available": "Vorhanden", "played": "Gesehen", "covered": "Vorhanden/gesehen", "removed": "Serie nicht mehr vorhanden"}.get(row.status_reason, "Status noch nicht geprüft") }}</span>{% endif %}
+                        {% if row.match_warning %}<span class="badge warning">Zuordnung prüfen</span>{% endif %}
+                      </div>
+                    </td>
+                    <td class="date-col" data-label="Datum">{{ row.published_at | local_datetime }}</td>
+                  {% endif %}
                 </tr>
               {% endfor %}
             </tbody>
@@ -309,7 +331,7 @@
       {% else %}
         <div class="empty">
           <strong>Keine Einträge</strong>
-          <span>{% if current_panel %}Momentan wurde kein fehlendes Release erkannt.{% else %}Nach dem ersten erfolgreichen Scan erscheint hier die Historie.{% endif %}</span>
+          <span>{% if current_panel %}Momentan wurde kein fehlendes Release erkannt.{% else %}Nach dem ersten Feed-Abgleich oder Import erscheinen hier Einträge.{% endif %}</span>
         </div>
       {% endif %}
     {% endmacro %}
@@ -318,7 +340,6 @@
       <div class="section-heading">
         <div>
           <h1 id="current-title">Aktuell fehlend</h1>
-          <p class="section-note">Episoden und Staffel-Releases, die in Jellyfin noch nicht vollständig sind.</p>
         </div>
         <span class="count">{{ current | length }} Einträge</span>
       </div>
@@ -348,7 +369,6 @@
       <div class="section-heading">
         <div>
           <h1 id="history-title">Historie</h1>
-          <p class="section-note">Alle zuletzt erkannten Veröffentlichungen.</p>
         </div>
         <span class="count">{{ history | length }} Einträge</span>
       </div>

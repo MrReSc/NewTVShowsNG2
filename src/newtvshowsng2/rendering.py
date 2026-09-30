@@ -61,13 +61,30 @@ class Renderer:
         current = group_current_releases(
             self.storage.announcements(current_only=True)
         )
-        history = self.storage.announcements()
         media_imports = self.storage.media_imports()
+        open_imports = [row for row in media_imports if row["status"] != "transferred"]
+        history = [
+            {**row, "kind": "feed", "history_at": row["published_at"]}
+            for row in self.storage.announcements()
+        ]
+        history.extend(
+            {
+                **row,
+                "kind": "import",
+                "history_at": row["transferred_at"] or row["last_seen_at"],
+            }
+            for row in media_imports
+            if row["status"] == "transferred"
+        )
+        history.sort(
+            key=lambda row: datetime.fromisoformat(row["history_at"]).astimezone(UTC),
+            reverse=True,
+        )
         state = self.storage.state()
         html = self.environment.get_template("index.html").render(
             current=current,
             history=history,
-            media_imports=media_imports,
+            media_imports=open_imports,
             state=state,
             media_import_enabled=self.media_import_enabled,
             generated_at=datetime.now(UTC),

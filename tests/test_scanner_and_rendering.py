@@ -1,7 +1,8 @@
 from copy import deepcopy
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -331,7 +332,7 @@ def test_release_variants_stay_stored_but_are_grouped_in_current_view(
     assert 'href="https://feed.test/post-1"' in current_html
     assert 'href="https://feed.test/post-2"' in current_html
     assert current_html.index(">720p</a>") < current_html.index(">1080p</a>")
-    assert history_html.count('data-label="Release"') == 2
+    assert history_html.count('data-label="Eintrag"') == 2
     assert history_html.count(f">The Walking Dead: Dead City · {marker}</a>") == 2
     assert f'title="{first.title}"' in history_html
     assert f'title="{second.title}"' in history_html
@@ -339,6 +340,99 @@ def test_release_variants_stay_stored_but_are_grouped_in_current_view(
         assert section.count("<th class=") == 4
         assert "Jellyfin-Serie" not in section
     assert "2 Einträge" in history_html
+
+
+def test_open_imports_and_transfers_render_in_separate_views_with_timeline(tmp_path) -> None:
+    cfg, storage, renderer = setup(tmp_path)
+    series = Series("dead-city", "The Walking Dead: Dead City", imdb_id="tt18546730")
+    scanner = Scanner(
+        cfg,
+        storage,
+        renderer,
+        Jellyfin(
+            Library([series], missing_episode_tracking_enabled=True),
+            {(series.id, 3): {1, 2}},
+        ),
+        Feeds([release()]),
+    )
+    assert scanner.run()
+
+    published = release().published_at
+    for source, transferred_at in (
+        ("older.mkv", published - timedelta(days=1)),
+        ("newer.mkv", published + timedelta(days=1)),
+    ):
+        storage.observe_media_import(source, source, transferred_at)
+        storage.update_media_import(
+            source,
+            "transferred",
+            "Übernommen",
+            parsed_title="Show",
+            season=1,
+            episode=2,
+            target_path=f"Show/Staffel 01/{source}",
+            transferred_at=transferred_at,
+        )
+    for source, status in (
+        ("waiting.mkv", "waiting"),
+        ("blocked.mkv", "blocked"),
+        ("selection.mkv", "needs_selection"),
+    ):
+        storage.observe_media_import(source, source, published)
+        storage.update_media_import(source, status, "Prüfung nötig")
+
+    renderer.render()
+    html = cfg.output_path.read_text(encoding="utf-8")
+    media_html = html.split('id="media-import-view"', 1)[1].split("</section>", 1)[0]
+    history_html = html.split('id="history-view"', 1)[1].split("</section>", 1)[0]
+
+    assert "3 Einträge" in media_html
+    assert all(
+        source in media_html
+        for source in ("waiting.mkv", "blocked.mkv", "selection.mkv")
+    )
+    assert "older.mkv" not in media_html and "newer.mkv" not in media_html
+    assert "3 Einträge" in history_html
+    assert (
+        history_html.index("newer.mkv")
+        < history_html.index("The Walking Dead: Dead City")
+        < history_html.index("older.mkv")
+    )
+    assert history_html.count('class="type-marker"') == 3
+    assert "Show/Staffel 01/newer.mkv" in history_html
+    assert "S01E02" in history_html
+    assert "Übernommen" in history_html
+    assert "waiting.mkv" not in history_html
+
+
+def test_ui_labels_and_link_states_render_consistently(tmp_path) -> None:
+    cfg, storage, renderer = setup(tmp_path)
+    renderer.media_import_enabled = True
+    renderer.render()
+    html = cfg.output_path.read_text(encoding="utf-8")
+    nav = html.split('<nav class="nav"', 1)[1].split("</nav>", 1)[0]
+
+    assert (
+        nav.index(">Feed</a>")
+        < nav.index(">Medienimport</a>")
+        < nav.index(">Historie</a>")
+        < nav.index(">Log</a>")
+    )
+    assert "Download jetzt scannen" in html
+    assert "Download ist leer" in html
+    assert "Keine offenen Importe" in html
+    assert 'class="section-note"' not in html
+    assert "--link: #53e4d3" in html
+    assert "--visited: #c4a0f7" in html
+    assert ".release a:visited { color: var(--visited); }" in html
+    assert ".variant-links a:visited { color: var(--visited);" in html
+
+    selection_html = renderer.render_selection(
+        SimpleNamespace(source_path="show.mkv", signature="signature", choices=())
+    )
+    assert "Download: show.mkv" in selection_html
+    assert "a:visited { color: var(--visited); }" in selection_html
+    assert "Die Auswahl importiert alle aktuell gefundenen Folgen" in selection_html
 
 
 def test_current_grouping_key_and_aggregated_fields() -> None:

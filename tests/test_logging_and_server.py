@@ -57,6 +57,14 @@ def test_log_renderer_escapes_content_and_limits_lines(tmp_path) -> None:
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert "<script>alert(1)</script>" not in html
     assert 'http-equiv="refresh" content="10"' in html
+    nav = html.split('<nav class="nav"', 1)[1].split("</nav>", 1)[0]
+    assert (
+        nav.index(">Feed</a>")
+        < nav.index(">Medienimport</a>")
+        < nav.index(">Historie</a>")
+        < nav.index(">Log</a>")
+    )
+    assert "Rotierend gespeichert" not in html
 
 
 def test_server_serves_log_page(tmp_path) -> None:
