@@ -36,6 +36,8 @@
     .filters input { width: 100%; }
     .button { display: inline-flex; align-items: center; justify-content: center; min-height: 39px; padding: 8px 13px; border: 1px solid #3d6661; border-radius: 5px; background: #0c302d; color: var(--link); font: 700 .85rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-decoration: none; cursor: pointer; }
     .button:hover { background: #17433e; }
+    .button.reset { border-color: #505050; background: #202020; color: var(--text); }
+    .button.reset:hover { background: #2a2a2a; }
     .result-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 18px; margin: 0 0 10px; color: var(--muted); font-size: .82rem; }
     .entries { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
     .entry { display: grid; grid-template-columns: 210px 82px minmax(0, 1fr); gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
@@ -93,6 +95,7 @@
         <input type="search" name="q" value="{{ search }}" maxlength="200" placeholder="Quelle oder Meldung durchsuchen">
       </label>
       <button class="button" type="submit">Anzeigen</button>
+      <a class="button reset" href="/log">Zurücksetzen</a>
     </form>
     <div class="result-meta">
       <span>{{ entry_count }} passende Einträge</span>

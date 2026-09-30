@@ -73,6 +73,7 @@ def test_log_renderer_groups_tracebacks_and_escapes_content(tmp_path) -> None:
     assert '<details><summary>Details / Traceback anzeigen</summary>' in html
     assert 'http-equiv="refresh"' not in html
     assert "Aktualisieren" in html
+    assert '<a class="button reset" href="/log">Zurücksetzen</a>' in html
     assert html.index("&lt;script&gt;") < html.index("Alter Eintrag")
     assert "30.09.2026, 13:00:00 CEST" in html
     nav = html.split('<nav class="nav"', 1)[1].split("</nav>", 1)[0]
