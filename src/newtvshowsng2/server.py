@@ -220,7 +220,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header(
             "Content-Security-Policy",
             "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; "
-            "base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
         )
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")

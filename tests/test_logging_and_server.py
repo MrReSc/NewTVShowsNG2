@@ -141,6 +141,7 @@ def test_server_serves_log_page(tmp_path) -> None:
         content = response.read().decode("utf-8")
         assert response.status == 200
         assert response.getheader("Cache-Control") == "no-store"
+        assert "form-action 'self'" in response.getheader("Content-Security-Policy")
         assert "scan complete" in content
         connection.close()
         connection = http.client.HTTPConnection(*server.server_address, timeout=3)
