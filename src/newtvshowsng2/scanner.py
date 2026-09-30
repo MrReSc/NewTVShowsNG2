@@ -197,6 +197,7 @@ class Scanner:
         *, selection: SelectedSeries | None = None,
     ) -> bool:
         try:
+            LOGGER.info("%s gestartet", "Medienimport" if kind == "import" else "Feed-Abgleich")
             library = self.jellyfin.load_library()
             if kind == "import":
                 result = self._import_media(
@@ -290,6 +291,9 @@ class Scanner:
             self.storage.refresh_library_state(library)
             feed_errors: list[str] = []
             successful_feeds = 0
+            feed_entries = 0
+            matched_entries = 0
+            matching_warnings = 0
 
             for feed_url in self.config.rss_urls:
                 try:
@@ -301,6 +305,7 @@ class Scanner:
                     LOGGER.error("RSS-Fehler: %s", message)
                     continue
 
+                feed_entries += len(releases)
                 for feed_release in releases:
                     parsed = parse_release(feed_release.title, feed_release.content)
                     if parsed is None:
@@ -308,13 +313,15 @@ class Scanner:
                         continue
                     match = match_release(parsed, library.series)
                     if match is None:
-                        LOGGER.info(
+                        LOGGER.debug(
                             "Keine Jellyfin-Serie für RSS-Titel %r (bereinigt: %r)",
                             feed_release.title,
                             parsed.normalized_title,
                         )
                         continue
+                    matched_entries += 1
                     if match.warning:
+                        matching_warnings += 1
                         LOGGER.warning(
                             "Unsichere Zuordnung: %r -> %r (%s)",
                             feed_release.title,
@@ -342,8 +349,10 @@ class Scanner:
             )
             self.renderer.render()
             LOGGER.info(
-                "Scan abgeschlossen%s",
-                f" ({len(feed_errors)} Feed-Fehler)" if feed_errors else "",
+                "Feed-Abgleich abgeschlossen: %d/%d Feeds erreichbar, "
+                "%d Einträge gelesen, %d zugeordnet, %d Warnungen",
+                successful_feeds, len(self.config.rss_urls), feed_entries,
+                matched_entries, len(feed_errors) + len(scan_warnings) + matching_warnings,
             )
             return True
         except Exception as exc:

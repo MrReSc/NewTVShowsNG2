@@ -1,5 +1,6 @@
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+import logging
 from pathlib import Path
 
 import pytest
@@ -60,6 +61,20 @@ def release_folder(income: Path, name: str, video_name: str | None = None) -> Pa
     folder.mkdir()
     (folder / (video_name or f"{name}.mkv")).write_bytes(b"episode")
     return folder
+
+
+def test_block_reason_is_logged_only_when_it_changes(tmp_path, caplog) -> None:
+    _, storage, importer = setup(tmp_path, Jellyfin())
+    storage.observe_media_import("Problem.S01E01.mkv", "signature", datetime(2026, 9, 30, tzinfo=UTC))
+
+    with caplog.at_level(logging.WARNING):
+        importer._record_block("Problem.S01E01.mkv", "Episode schon vorhanden")
+        importer._record_block("Problem.S01E01.mkv", "Episode schon vorhanden")
+        importer._record_block("Problem.S01E01.mkv", "Datei unvollständig")
+
+    assert caplog.text.count("Problem.S01E01.mkv blockiert") == 2
+    assert "Episode schon vorhanden" in caplog.text
+    assert "Datei unvollständig" in caplog.text
 
 
 def test_existing_series_release_folder_moves_after_stability_window(tmp_path) -> None:

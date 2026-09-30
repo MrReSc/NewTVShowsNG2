@@ -208,7 +208,7 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def _serve_log(self) -> None:
         try:
-            content = self.server.log_renderer.render().encode("utf-8")
+            content = self.server.log_renderer.render(urlsplit(self.path).query).encode("utf-8")
         except OSError:
             LOGGER.exception("Logseite konnte nicht erzeugt werden")
             self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)

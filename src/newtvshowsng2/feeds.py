@@ -40,5 +40,5 @@ class FeedClient:
 
         releases = [feed_entry_to_release(feed_url, entry) for entry in entries]
         result = [release for release in releases if release is not None]
-        LOGGER.info("RSS %s: %d Einträge geladen", feed_url, len(result))
+        LOGGER.debug("RSS %s: %d Einträge geladen", feed_url, len(result))
         return result

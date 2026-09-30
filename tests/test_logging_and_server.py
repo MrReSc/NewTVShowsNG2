@@ -5,27 +5,23 @@ import logging
 import threading
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 from newtvshowsng2 import logging_utils
-from newtvshowsng2.logging_utils import configure_logging, read_recent_log_lines
+from newtvshowsng2.logging_utils import configure_logging, read_log_entries
 from newtvshowsng2.rendering import LogRenderer, Renderer
 from newtvshowsng2.server import ApplicationServer
 from newtvshowsng2.storage import Storage
 
 
-def test_recent_log_lines_include_backup_and_are_limited(tmp_path) -> None:
-    log_path = tmp_path / "app.log"
-    log_path.with_name("app.log.1").write_text("old-1\nold-2\n", encoding="utf-8")
-    log_path.write_text("new-1\nnew-2\n", encoding="utf-8")
-
-    assert read_recent_log_lines(log_path, limit=3) == ["old-2", "new-1", "new-2"]
-
-
 def test_configured_log_file_rotates(tmp_path, monkeypatch) -> None:
+    assert logging_utils.LOG_MAX_BYTES == 2 * 1024 * 1024
+    assert logging_utils.LOG_BACKUP_COUNT == 9
     root = logging.getLogger()
     original_handlers = root.handlers[:]
     original_level = root.level
     monkeypatch.setattr(logging_utils, "LOG_MAX_BYTES", 220)
+    monkeypatch.setattr(logging_utils, "LOG_BACKUP_COUNT", 2)
     log_path = tmp_path / "app.log"
     try:
         configure_logging(log_path, "INFO")
@@ -37,6 +33,14 @@ def test_configured_log_file_rotates(tmp_path, monkeypatch) -> None:
         assert log_path.with_name("app.log.1").exists()
         assert log_path.stat().st_size <= 220
         assert log_path.with_name("app.log.1").stat().st_size <= 220
+        assert log_path.with_name("app.log.2").stat().st_size <= 220
+        retained = "".join(
+            path.read_text(encoding="utf-8")
+            for path in (log_path.with_name("app.log.2"), log_path.with_name("app.log.1"), log_path)
+        )
+        assert "+00:00 INFO rotation-test:" in retained
+        assert "Zeile 19" in retained
+        assert "Zeile 00" not in retained
     finally:
         for handler in root.handlers:
             handler.close()
@@ -44,19 +48,33 @@ def test_configured_log_file_rotates(tmp_path, monkeypatch) -> None:
         root.setLevel(original_level)
 
 
-def test_log_renderer_escapes_content_and_limits_lines(tmp_path) -> None:
+def test_log_renderer_groups_tracebacks_and_escapes_content(tmp_path) -> None:
     log_path = tmp_path / "app.log"
-    lines = [f"line-{index}" for index in range(510)]
-    lines[-1] = "<script>alert(1)</script>"
-    log_path.write_text("\n".join(lines), encoding="utf-8")
+    now = datetime(2026, 9, 30, 12, tzinfo=UTC)
+    log_path.write_text(
+        "2026-09-29 15:00:00,123 INFO newtvshowsng2.scanner: Alter Eintrag\n"
+        "2026-09-30T11:00:00+00:00 ERROR newtvshowsng2.scanner: <script>alert(1)</script>\n"
+        "Traceback (most recent call last):\n"
+        "  File \"scan.py\", line 1, in run\n"
+        "ValueError: kaputt\n",
+        encoding="utf-8",
+    )
 
-    html = LogRenderer(log_path, "Europe/Zurich").render()
+    entries = read_log_entries(log_path, ZoneInfo("Europe/Zurich"))
+    assert len(entries) == 2
+    assert entries[0].timestamp == datetime(2026, 9, 29, 15, tzinfo=ZoneInfo("Europe/Zurich")).replace(microsecond=123000)
+    assert "Traceback" in entries[1].details
 
-    assert "line-0" not in html
-    assert "line-10" in html
+    html = LogRenderer(log_path, "Europe/Zurich").render(now=now)
+
+    assert "Alter Eintrag" in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert "<script>alert(1)</script>" not in html
-    assert 'http-equiv="refresh" content="10"' in html
+    assert '<details><summary>Details / Traceback anzeigen</summary>' in html
+    assert 'http-equiv="refresh"' not in html
+    assert "Aktualisieren" in html
+    assert html.index("&lt;script&gt;") < html.index("Alter Eintrag")
+    assert "30.09.2026, 13:00:00 CEST" in html
     nav = html.split('<nav class="nav"', 1)[1].split("</nav>", 1)[0]
     assert (
         nav.index(">Feed</a>")
@@ -64,14 +82,51 @@ def test_log_renderer_escapes_content_and_limits_lines(tmp_path) -> None:
         < nav.index(">Historie</a>")
         < nav.index(">Log</a>")
     )
-    assert "Rotierend gespeichert" not in html
+
+
+def test_log_filters_search_and_pagination_include_all_backups(tmp_path, monkeypatch) -> None:
+    now = datetime(2026, 9, 30, 12, tzinfo=UTC)
+    log_path = tmp_path / "app.log"
+    monkeypatch.setattr(logging_utils, "LOG_BACKUP_COUNT", 2)
+    monkeypatch.setattr("newtvshowsng2.rendering.LOG_PAGE_ENTRIES", 2)
+    log_path.with_name("app.log.2").write_text(
+        "2026-09-23T11:59:59+00:00 ERROR app: too old\n"
+        "2026-09-24T12:00:00+00:00 WARNING app: old warning\n", encoding="utf-8",
+    )
+    log_path.with_name("app.log.1").write_text(
+        "2026-09-29T13:00:00+00:00 INFO app: recent info\n"
+        "2026-09-30T09:00:00+00:00 WARNING app: recent warning\n", encoding="utf-8",
+    )
+    log_path.write_text(
+        "2026-09-30T10:00:00+00:00 ERROR app: recent error\n", encoding="utf-8",
+    )
+    renderer = LogRenderer(log_path, "Europe/Zurich")
+
+    default = renderer.render(now=now)
+    assert "recent error" in default and "recent warning" in default
+    assert "recent info" not in default
+    assert "old warning" not in default
+    assert 'href="/log?period=24h&amp;level=DEBUG&amp;page=2"' in default
+    page_two = renderer.render("page=2", now=now)
+    assert "recent info" in page_two and "recent error" not in page_two
+    seven_days = renderer.render("period=7d&level=WARNING&page=2", now=now)
+    assert "old warning" in seven_days and "too old" not in seven_days
+    assert "Ältester gespeicherter Eintrag: 23.09.2026" in seven_days
+    searched = renderer.render("period=7d&level=WARNING&q=warning", now=now)
+    assert "old warning" in searched and "recent warning" in searched
+    assert "recent error" not in searched
+    assert 'href="/log?period=7d&amp;level=WARNING&amp;q=warning&amp;page=1"' in searched
 
 
 def test_server_serves_log_page(tmp_path) -> None:
     output_path = tmp_path / "index.html"
     output_path.write_text("<!doctype html><title>Übersicht</title>", encoding="utf-8")
     log_path = tmp_path / "app.log"
-    log_path.write_text("scan complete", encoding="utf-8")
+    stamp = datetime.now(UTC).isoformat(timespec="seconds")
+    log_path.write_text(
+        f"{stamp} INFO app: scan complete\n{stamp} ERROR app: scan failed\n",
+        encoding="utf-8",
+    )
     storage = Storage(tmp_path / "state.sqlite3")
     storage.initialize()
     server = ApplicationServer(
@@ -87,6 +142,14 @@ def test_server_serves_log_page(tmp_path) -> None:
         assert response.status == 200
         assert response.getheader("Cache-Control") == "no-store"
         assert "scan complete" in content
+        connection.close()
+        connection = http.client.HTTPConnection(*server.server_address, timeout=3)
+        connection.request("GET", "/log?level=ERROR")
+        response = connection.getresponse()
+        filtered = response.read().decode("utf-8")
+        assert response.status == 200
+        assert "scan failed" in filtered
+        assert "scan complete" not in filtered
     finally:
         server.shutdown()
         server.server_close()

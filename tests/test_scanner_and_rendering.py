@@ -1,6 +1,7 @@
 from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -76,6 +77,17 @@ def setup(tmp_path):
     storage.initialize()
     renderer = Renderer(storage, cfg.output_path, cfg.timezone)
     return cfg, storage, renderer
+
+
+def test_feed_log_summarizes_run_without_info_noise(tmp_path, caplog) -> None:
+    cfg, storage, renderer = setup(tmp_path)
+    scanner = Scanner(cfg, storage, renderer, Jellyfin(Library([])), Feeds([release("Unbekannt.S01E01")]))
+
+    with caplog.at_level(logging.INFO):
+        assert scanner.run_feed()
+
+    assert "Feed-Abgleich abgeschlossen: 1/1 Feeds erreichbar, 1 Einträge gelesen, 0 zugeordnet" in caplog.text
+    assert "Keine Jellyfin-Serie" not in caplog.text
 
 
 def release_views(html: str) -> tuple[str, str]:

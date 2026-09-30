@@ -4,15 +4,16 @@ import os
 import re
 import tempfile
 from collections import Counter, defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlencode
 from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
-from .logging_utils import LOG_PAGE_LINES, read_recent_log_lines
+from .logging_utils import LOG_LEVELS, LOG_PAGE_ENTRIES, read_log_entries
 from .media_importer import SelectionOptions
 from .storage import Storage
 
@@ -241,13 +242,67 @@ class LogRenderer:
             autoescape=select_autoescape(("html", "xml")),
         )
 
-    def render(self) -> str:
-        lines = read_recent_log_lines(self.log_path)
+    def render(self, query: str = "", now: datetime | None = None) -> str:
+        parameters = parse_qs(query, keep_blank_values=True)
+        period = parameters.get("period", ["24h"])[0]
+        if period not in ("24h", "7d"):
+            period = "24h"
+        level = parameters.get("level", ["DEBUG"])[0]
+        if level not in LOG_LEVELS:
+            level = "DEBUG"
+        search = parameters.get("q", [""])[0].strip()[:200]
+        try:
+            requested_page = max(1, int(parameters.get("page", ["1"])[0]))
+        except ValueError:
+            requested_page = 1
+
+        now = now or datetime.now(UTC)
+        entries = read_log_entries(self.log_path, self.timezone)
+        dated = [entry.timestamp for entry in entries if entry.timestamp is not None]
+        oldest = min(dated) if dated else None
+        cutoff = now - (timedelta(days=7) if period == "7d" else timedelta(hours=24))
+        matching = [
+            entry for entry in entries
+            if (entry.timestamp is None or entry.timestamp >= cutoff)
+            and LOG_LEVELS[entry.level] >= LOG_LEVELS[level]
+            and search.casefold() in f"{entry.source} {entry.message} {entry.details}".casefold()
+        ]
+        matching.sort(
+            key=lambda entry: entry.timestamp or datetime.min.replace(tzinfo=UTC),
+            reverse=True,
+        )
+        page_count = max(1, (len(matching) + LOG_PAGE_ENTRIES - 1) // LOG_PAGE_ENTRIES)
+        page = min(requested_page, page_count)
+        selected = matching[(page - 1) * LOG_PAGE_ENTRIES:page * LOG_PAGE_ENTRIES]
+        base_query = {"period": period, "level": level}
+        if search:
+            base_query["q"] = search
+
+        def page_url(number: int) -> str:
+            return "/log?" + urlencode({**base_query, "page": number})
+
         return self.environment.get_template("log.html").render(
-            log_text="\n".join(lines),
-            line_count=len(lines),
-            line_limit=LOG_PAGE_LINES,
-            generated_at=datetime.now(UTC)
-            .astimezone(self.timezone)
-            .strftime("%d.%m.%Y, %H:%M:%S"),
+            entries=[
+                {
+                    "time": entry.timestamp.astimezone(self.timezone).strftime("%d.%m.%Y, %H:%M:%S %Z")
+                    if entry.timestamp else "Zeit unbekannt",
+                    "iso_time": entry.timestamp.isoformat() if entry.timestamp else "",
+                    "level": entry.level,
+                    "source": entry.source,
+                    "message": entry.message,
+                    "details": entry.details,
+                }
+                for entry in selected
+            ],
+            period=period,
+            level=level,
+            search=search,
+            page=page,
+            page_count=page_count,
+            entry_count=len(matching),
+            oldest=oldest.astimezone(self.timezone).strftime("%d.%m.%Y, %H:%M:%S %Z") if oldest else None,
+            refresh_url=page_url(page),
+            previous_url=page_url(page - 1) if page > 1 else None,
+            next_url=page_url(page + 1) if page < page_count else None,
+            generated_at=now.astimezone(self.timezone).strftime("%d.%m.%Y, %H:%M:%S %Z"),
         )

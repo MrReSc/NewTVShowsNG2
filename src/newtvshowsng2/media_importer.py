@@ -229,14 +229,14 @@ class MediaImporter:
             except ImportBlocked as exc:
                 signature = self._best_effort_signature(path)
                 self.storage.observe_media_import(relative, signature, now)
-                self.storage.update_media_import(relative, "blocked", str(exc))
+                self._record_block(relative, str(exc))
                 blocked += 1
                 continue
             except OSError as exc:
                 signature = self._best_effort_signature(path)
                 self.storage.observe_media_import(relative, signature, now)
                 message = f"Quelle konnte nicht vollständig gelesen werden: {exc}"
-                self.storage.update_media_import(relative, "blocked", message)
+                self._record_block(relative, message)
                 warnings.append(f"{relative}: {message}")
                 blocked += 1
                 continue
@@ -269,13 +269,12 @@ class MediaImporter:
             try:
                 parsed = self._parse_source(unit)
             except ImportBlocked as exc:
-                self.storage.update_media_import(relative, "blocked", str(exc))
+                self._record_block(relative, str(exc))
                 blocked += 1
                 continue
             if parsed is None or parsed.episode is None or parsed.season != parsed.season_end:
-                self.storage.update_media_import(
+                self._record_block(
                     relative,
-                    "blocked",
                     "Serie, Staffel und einzelne Episode konnten nicht eindeutig gelesen werden",
                 )
                 blocked += 1
@@ -307,16 +306,15 @@ class MediaImporter:
                 waiting += 1
                 continue
             except ImportSelectionRequired as exc:
-                self.storage.update_media_import(
-                    relative, "needs_selection", str(exc), parsed_title=parsed.series_title,
+                self._record_block(
+                    relative, str(exc), status="needs_selection", parsed_title=parsed.series_title,
                     season=parsed.season, episode=parsed.episode,
                 )
                 blocked += 1
                 continue
             except ImportBlocked as exc:
-                self.storage.update_media_import(
+                self._record_block(
                     relative,
-                    "blocked",
                     str(exc),
                     parsed_title=parsed.series_title,
                     season=parsed.season,
@@ -326,9 +324,8 @@ class MediaImporter:
                 continue
             except OSError as exc:
                 message = f"Dateitransfer fehlgeschlagen: {exc}"
-                self.storage.update_media_import(
+                self._record_block(
                     relative,
-                    "blocked",
                     message,
                     parsed_title=parsed.series_title,
                     season=parsed.season,
@@ -368,6 +365,19 @@ class MediaImporter:
                 self.storage.set_library_refresh_pending(False)
 
         return ImportRunResult(transferred, blocked, waiting, tuple(warnings))
+
+    def _record_block(
+        self, source_path: str, reason: str, *, status: str = "blocked",
+        parsed_title: str | None = None, season: int | None = None,
+        episode: int | None = None,
+    ) -> None:
+        previous = self.storage.media_import(source_path)
+        self.storage.update_media_import(
+            source_path, status, reason, parsed_title=parsed_title,
+            season=season, episode=episode,
+        )
+        if previous is None or previous["status"] != status or previous["reason"] != reason:
+            LOGGER.warning("Medienimport: %s blockiert: %s", source_path, reason)
 
     def _belongs_to_selection(self, path: Path, selection: SelectedSeries) -> bool:
         if path.name == selection.source_path:
