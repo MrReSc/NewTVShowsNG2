@@ -143,8 +143,10 @@ class Scanner:
     ) -> bool:
         if self.importer is None or not self.config.media_import_enabled:
             raise ValueError("Medienimport ist deaktiviert")
-        if not self._lock.acquire(blocking=False):
-            return False
+        # The import page can still contain another selection while the
+        # previous one is finishing. Serialize those choices instead of
+        # rejecting the later request as a conflicting manual run.
+        self._lock.acquire()
         began = started = False
         try:
             selection = self.importer.select_series(source_path, signature, choice_key)

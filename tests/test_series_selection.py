@@ -139,6 +139,109 @@ def test_choice_without_imdb_link_remains_selectable_and_conflicts_block(tmp_pat
     assert jellyfin.refresh_calls == 0
 
 
+def test_second_distinct_selection_waits_for_first_import(tmp_path) -> None:
+    first_refresh_started = threading.Event()
+    allow_first_refresh = threading.Event()
+
+    class BlockingRefreshJellyfin(LiveJellyfin):
+        def refresh_library(self):
+            self.refresh_calls += 1
+            if self.refresh_calls == 1:
+                first_refresh_started.set()
+                assert allow_first_refresh.wait(timeout=3)
+
+    jellyfin = BlockingRefreshJellyfin([
+        RemoteSeries("Alpha Show", 2026, (("Imdb", "tt0000001"),)),
+        RemoteSeries("Alpha Show", 2026, (("Imdb", "tt0000002"),)),
+        RemoteSeries("Beta Show", 2026, (("Imdb", "tt0000003"),)),
+        RemoteSeries("Beta Show", 2026, (("Imdb", "tt0000004"),)),
+    ])
+    config, storage, importer = setup(tmp_path, jellyfin)
+    first_source = release_folder(config.income_dir, "Alpha.Show.S01E01.German")
+    second_source = release_folder(config.income_dir, "Beta.Show.S01E01.German")
+    importer.run(Library([]), datetime(2026, 9, 29, tzinfo=UTC), force=True)
+    first_options = importer.selection_options(first_source.name)
+    second_options = importer.selection_options(second_source.name)
+
+    def selection_body(options, imdb_id):
+        choice = next(
+            item for item in options.choices
+            if ("Imdb", imdb_id) in item.remote.provider_ids
+        )
+        return urlencode({
+            "source": options.source_path,
+            "signature": options.signature,
+            "choice": choice.key,
+        })
+
+    renderer = Renderer(storage, config.output_path, config.timezone, True)
+    renderer.render()
+    scanner = Scanner(config, storage, renderer, jellyfin, object(), importer)
+    second_start_attempted = threading.Event()
+    start_selected_import = scanner.start_selected_import
+
+    def track_second_start(source_path, signature, choice_key):
+        if source_path == second_source.name:
+            second_start_attempted.set()
+        return start_selected_import(source_path, signature, choice_key)
+
+    scanner.start_selected_import = track_second_start
+    server = ApplicationServer(
+        ("127.0.0.1", 0), config.output_path, storage, config.log_path,
+        config.timezone, scanner,
+    )
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    origin = f"http://127.0.0.1:{server.server_address[1]}"
+    headers = {"Origin": origin, "Content-Type": "application/x-www-form-urlencoded"}
+
+    def post(body):
+        connection = http.client.HTTPConnection(*server.server_address, timeout=5)
+        try:
+            connection.request("POST", "/run/import/resolve", body=body, headers=headers)
+            response = connection.getresponse()
+            return response.status, response.getheader("Location"), response.read().decode()
+        finally:
+            connection.close()
+
+    second_response = []
+    second_done = threading.Event()
+
+    def post_second_selection():
+        try:
+            second_response.append(post(selection_body(second_options, "tt0000003")))
+        finally:
+            second_done.set()
+
+    try:
+        assert post(selection_body(first_options, "tt0000001"))[:2] == (
+            303, "/#media-import"
+        )
+        assert first_refresh_started.wait(timeout=3)
+        second_thread = threading.Thread(target=post_second_selection)
+        second_thread.start()
+        assert second_start_attempted.wait(timeout=3)
+        assert not second_done.wait(timeout=0.1)
+
+        allow_first_refresh.set()
+        assert second_done.wait(timeout=3)
+        second_thread.join(timeout=3)
+        assert second_response[0][:2] == (303, "/#media-import")
+
+        deadline = time.monotonic() + 3
+        while scanner._lock.locked() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert not scanner._lock.locked()
+        assert storage.state()["manual_import_status"] == "ok"
+        assert not first_source.exists()
+        assert not second_source.exists()
+    finally:
+        allow_first_refresh.set()
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=3)
+
+
 def test_selection_page_endpoints_and_schedule(tmp_path) -> None:
     config, storage, importer, jellyfin, sources, _ = _prepare(tmp_path)
     next_run = datetime(2026, 10, 1, tzinfo=UTC)
@@ -187,11 +290,6 @@ def test_selection_page_endpoints_and_schedule(tmp_path) -> None:
         })
         assert request("POST", "/run/import/resolve", stale_body, headers)[0] == 409
         assert all(item.exists() for item in sources)
-        scanner._lock.acquire()
-        try:
-            assert request("POST", "/run/import/resolve", body, headers)[0] == 409
-        finally:
-            scanner._lock.release()
         assert request("POST", "/run/import/resolve", body, headers)[:2] == (303, "/#media-import")
         deadline = time.monotonic() + 3
         while scanner._lock.locked() and time.monotonic() < deadline:
