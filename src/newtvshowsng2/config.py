@@ -22,8 +22,8 @@ class Config:
     data_dir: Path = Path("/data")
     output_dir: Path = Path("/out")
     request_timeout: float = 20.0
-    income_dir: Path = Path("/income")
-    shows_dir: Path = Path("/shows")
+    income_dir: Path = Path("/media/Downloads_NAS")
+    shows_dir: Path = Path("/media/Serien/Watched")
     jellyfin_shows_path: str = "/data/tvshows"
     import_stable_hours: float = 1.0
     media_import_enabled: bool = False
@@ -85,8 +85,8 @@ class Config:
             data_dir=Path(os.getenv("DATA_DIR", "/data")),
             output_dir=Path(os.getenv("OUTPUT_DIR", "/out")),
             request_timeout=_positive_float("REQUEST_TIMEOUT_SECONDS", 20.0),
-            income_dir=Path(os.getenv("INCOME_DIR", "/income")),
-            shows_dir=Path(os.getenv("SHOWS_DIR", "/shows")),
+            income_dir=Path(os.getenv("INCOME_DIR", "/media/Downloads_NAS")),
+            shows_dir=Path(os.getenv("SHOWS_DIR", "/media/Serien/Watched")),
             jellyfin_shows_path=os.getenv(
                 "JELLYFIN_SHOWS_PATH", "/data/tvshows"
             ).strip(),

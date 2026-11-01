@@ -3,6 +3,23 @@ import pytest
 from newtvshowsng2.config import Config
 
 
+def test_common_mount_defaults_and_explicit_directory_overrides(monkeypatch):
+    monkeypatch.setenv("JELLYFIN_URL", "http://jellyfin.test")
+    monkeypatch.setenv("JELLYFIN_API_KEY", "secret")
+    monkeypatch.setenv("RSS_URLS", "https://feed.test/rss")
+    monkeypatch.setenv("JELLYFIN_USERNAME", "Hans")
+    monkeypatch.delenv("INCOME_DIR", raising=False)
+    monkeypatch.delenv("SHOWS_DIR", raising=False)
+    config = Config.from_env()
+    assert str(config.income_dir) == "/media/Downloads_NAS"
+    assert str(config.shows_dir) == "/media/Serien/Watched"
+    monkeypatch.setenv("INCOME_DIR", "/media/custom/income")
+    monkeypatch.setenv("SHOWS_DIR", "/media/custom/shows")
+    config = Config.from_env()
+    assert str(config.income_dir) == "/media/custom/income"
+    assert str(config.shows_dir) == "/media/custom/shows"
+
+
 def test_username_required_and_trimmed(monkeypatch):
     monkeypatch.setenv("JELLYFIN_URL", "http://jellyfin.test")
     monkeypatch.setenv("JELLYFIN_API_KEY", "test-secret")

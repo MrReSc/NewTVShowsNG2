@@ -4,6 +4,8 @@ Datum: 2026-11-01
 
 Status: Angenommen
 
+Präzisierung: [ADR 0006](0006-atomare-medienverschiebung.md) beschreibt die beauftragte atomare Verschiebung, den Erhalt derselben Inodes und das Verhalten nach Unterbrechungen.
+
 ## Kontext
 
 Die Anwendung greift auf Jellyfin und auf Medienverzeichnisse zu. Fehlerhafte API-Aufrufe, unsichere Pfade oder unvollständige Dateiübertragungen dürfen die bestehende Instanz und ihre Medien nicht beschädigen.

@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import re
-import shutil
 import stat
 import uuid
 from dataclasses import dataclass
@@ -15,6 +14,7 @@ from pathlib import Path, PurePosixPath
 from contextlib import contextmanager
 from collections.abc import Iterator
 
+from . import filesystem
 from .config import Config
 from .jellyfin import JellyfinClient, JellyfinError
 from .matching import match_release
@@ -112,6 +112,7 @@ class MediaImporter:
         now = now or datetime.now(UTC)
         if not self.config.income_dir.is_dir():
             raise OSError(f"Income-Mount fehlt: {self.config.income_dir}")
+        protected = self.recover_moves()
         changed = False
         seen_paths: set[str] = set()
         for path in sorted(
@@ -119,6 +120,8 @@ class MediaImporter:
         ):
             relative = path.relative_to(self.config.income_dir).as_posix()
             seen_paths.add(relative)
+            if relative in protected:
+                continue
             signature = self._best_effort_signature(path)
             _, source_changed, _ = self.storage.observe_media_import(
                 relative, signature, now, touch=False
@@ -128,7 +131,7 @@ class MediaImporter:
         return changed or removed > 0
 
     def has_work(self) -> bool:
-        if self.storage.library_refresh_pending():
+        if self.storage.library_refresh_pending() or self.storage.pending_media_moves():
             return True
         if not self.config.income_dir.is_dir():
             return True
@@ -202,6 +205,7 @@ class MediaImporter:
     ) -> ImportRunResult:
         now = now or datetime.now(UTC)
         self._validate_mounts()
+        protected = self.recover_moves()
         self._validate_jellyfin_root()
 
         if selection is not None:
@@ -239,6 +243,9 @@ class MediaImporter:
         for path in units:
             relative = path.relative_to(self.config.income_dir).as_posix()
             seen_paths.add(relative)
+            if relative in protected:
+                blocked += 1
+                continue
             try:
                 unit = self._inspect_source(path)
             except ImportBlocked as exc:
@@ -353,23 +360,12 @@ class MediaImporter:
                 blocked += 1
                 continue
 
-            self.storage.update_media_import(
-                relative,
-                "transferred",
-                transfer_warning or f"Nach {display_name} verschoben",
-                parsed_title=parsed.series_title,
-                season=parsed.season,
-                episode=parsed.episode,
-                target_path=target.relative_to(
-                    self.config.shows_dir.resolve()
-                ).as_posix(),
-                transferred_at=now,
-            )
             if transfer_warning:
                 warnings.append(f"{relative}: {transfer_warning}")
             transferred += 1
 
         if selection is None:
+            blocked += len(protected - seen_paths)
             self.storage.forget_unseen_media_imports(seen_paths)
         if transferred:
             self.storage.set_library_refresh_pending(True)
@@ -414,6 +410,10 @@ class MediaImporter:
         ).casefold()
 
     def _validate_mounts(self) -> None:
+        try:
+            filesystem.preflight(self.config.income_dir, self.config.shows_dir)
+        except (filesystem.FilesystemBlocked, OSError, ValueError, KeyError) as exc:
+            raise JellyfinError(f"Vorprüfung für atomaren Import fehlgeschlagen: {exc}") from exc
         if not self.config.income_dir.is_dir():
             raise JellyfinError(f"Income-Mount fehlt: {self.config.income_dir}")
         if not self.config.shows_dir.is_dir():
@@ -811,99 +811,112 @@ class MediaImporter:
     def _transfer(
         self, unit: SourceUnit, series_path: Path, season_path: Path
     ) -> tuple[Path, str | None]:
-        target = season_path / unit.path.name
-        target = _contained_path(self.config.shows_dir, target)
-        staging_root = _prepare_staging_root(self.config.shows_dir)
-
-        with _exclusive_import_lock(staging_root):
+        target = _contained_path(self.config.shows_dir, season_path / unit.path.name)
+        source_relative = unit.path.relative_to(self.config.income_dir).as_posix()
+        with _exclusive_import_lock(_prepare_staging_root(self.config.shows_dir)):
             _recover_incomplete_target(target)
             if target.exists():
                 raise ImportBlocked("Ein gleichnamiges Ziel existiert bereits")
-            if _signature(unit.path) != unit.signature:
-                raise ImportBlocked("Quelle hat sich vor dem Kopieren verändert")
-
-            stage = staging_root / f"{uuid.uuid4().hex}-{unit.path.name}"
-            stage_owned = False
             try:
-                if unit.path.is_dir():
-                    stage.mkdir(mode=0o700, exist_ok=False)
-                    stage_owned = True
-                    shutil.copytree(
-                        unit.path,
-                        stage,
-                        dirs_exist_ok=True,
-                        copy_function=shutil.copy2,
-                    )
-                else:
-                    descriptor = os.open(
-                        stage, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600
-                    )
-                    os.close(descriptor)
-                    stage_owned = True
-                    shutil.copy2(unit.path, stage)
-                _verify_copy(unit.path, stage)
-                _fsync_tree(stage)
-                if _signature(unit.path) != unit.signature:
-                    raise ImportBlocked("Quelle hat sich während des Kopierens verändert")
                 _ensure_directory(series_path)
                 _ensure_directory(season_path)
-                if target.exists():
-                    raise ImportBlocked(
-                        "Ein gleichnamiges Ziel wurde während des Imports angelegt"
+                filesystem.check_pair(unit.path, season_path)
+                with (
+                    filesystem.open_path(unit.path.parent) as source_parent,
+                    filesystem.open_path(season_path) as target_parent,
+                    filesystem.open_path(unit.path) as source_fd,
+                ):
+                    expected = filesystem.snapshot_fd(source_fd, sync=True)
+                    if _signature(unit.path) != unit.signature:
+                        raise ImportBlocked("Quelle hat sich vor dem Verschieben verändert")
+                    parsed = self._parse_source(unit)
+                    if parsed is None:
+                        raise ImportBlocked("Quelle ist vor dem Verschieben nicht mehr lesbar zugeordnet")
+                    operation_id = uuid.uuid4().hex
+                    self.storage.prepare_media_move(
+                        operation_id, source_relative,
+                        target.relative_to(self.config.shows_dir.resolve()).as_posix(),
+                        expected,
+                        {"parsed_title": parsed.series_title, "season": parsed.season,
+                         "episode": parsed.episode},
                     )
-                # Store the scan intent before publication. If the process stops
-                # immediately after the filesystem change, the next run still
-                # refreshes Jellyfin 12.
-                self.storage.set_library_refresh_pending(True)
-                _publish_without_overwrite(stage, target)
-            except BaseException:
-                if stage_owned:
-                    _remove_stage(stage)
-                raise
+                    moved = False
+                    try:
+                        # The namespace change must not precede its durable intent.
+                        _fsync_directory(series_path.parent)
+                        _fsync_directory(series_path)
+                        os.fsync(source_parent)
+                        os.fsync(target_parent)
+                        current = os.stat(
+                            unit.path.name, dir_fd=source_parent, follow_symlinks=False
+                        )
+                        if (current.st_dev, current.st_ino) != (expected["."][0], expected["."][2]):
+                            raise ImportBlocked("Quellidentität hat sich vor dem Verschieben verändert")
+                        if _signature(unit.path) != unit.signature:
+                            raise ImportBlocked("Quelle hat sich vor dem Verschieben verändert")
+                        filesystem.rename_noreplace(
+                            source_parent, unit.path.name, target_parent, target.name
+                        )
+                        moved = True
+                        if filesystem.snapshot(target) != expected:
+                            raise ImportBlocked("Identität am Ziel stimmt nach dem Verschieben nicht überein")
+                        _fsync_directory(target.parent)
+                        _fsync_directory(unit.path.parent)
+                        self.storage.complete_media_move(operation_id)
+                    except Exception as exc:
+                        # A rename can have succeeded even if a later step failed.
+                        if moved or not unit.path.exists():
+                            self.storage.set_library_refresh_pending(True)
+                            raise ImportBlocked(
+                                f"Bereits verschoben nach {target}. Abschluss noch offen: {exc}"
+                            ) from exc
+                        self.storage.cancel_media_move(operation_id)
+                        raise
+            except filesystem.FilesystemBlocked as exc:
+                raise ImportBlocked(str(exc)) from exc
+        return target, None
 
-            try:
-                source_signature = _signature(unit.path)
-            except FileNotFoundError:
-                self.storage.set_library_refresh_pending(True)
-                return target, (
-                    "Ziel wurde vollständig übernommen; die Quelle war vor der "
-                    "abschliessenden Entfernung bereits nicht mehr vorhanden"
-                )
-            except (OSError, ImportBlocked) as exc:
-                self.storage.set_library_refresh_pending(True)
-                return target, (
-                    "Ziel wurde vollständig übernommen; die Quelle konnte vor dem "
-                    f"Löschen nicht erneut geprüft werden und bleibt erhalten: {exc}"
-                )
-
-            if source_signature != unit.signature:
-                self.storage.set_library_refresh_pending(True)
-                return target, (
-                    "Quelle hat sich nach dem Kopieren verändert. Quelle und geprüftes "
-                    "Ziel bleiben zur manuellen Kontrolle erhalten"
-                )
-
-            # Persist the required Jellyfin refresh before the source can be
-            # removed, so an interruption cannot lose that intent.
-            self.storage.set_library_refresh_pending(True)
-            source_warning = None
-            try:
-                if unit.path.is_dir():
-                    shutil.rmtree(unit.path)
-                else:
-                    unit.path.unlink()
-                _fsync_directory(unit.path.parent)
-            except OSError as exc:
-                source_warning = (
-                    "Ziel wurde vollständig übernommen, die Quelle konnte aber nicht "
-                    f"sicher entfernt und synchronisiert werden: {exc}"
-                )
-                LOGGER.error(
-                    "Import wurde abgeschlossen, Quelle %s konnte aber nicht entfernt werden: %s",
-                    unit.path,
-                    exc,
-                )
-            return target, source_warning
+    def recover_moves(self) -> set[str]:
+        pending = self.storage.pending_media_moves()
+        blocked = {row["source_path"] for row in pending}
+        if not pending:
+            return blocked
+        self._validate_mounts()
+        with _exclusive_import_lock(_prepare_staging_root(self.config.shows_dir)):
+            for row in self.storage.pending_media_moves():
+                if row["state"] == "manual":
+                    continue
+                try:
+                    source = _contained_path(self.config.income_dir, self.config.income_dir / row["source_path"])
+                    target = _contained_path(self.config.shows_dir, self.config.shows_dir / row["target_path"])
+                    expected = json.loads(row["identity_json"])
+                    if source.exists():
+                        if filesystem.snapshot(source) != expected:
+                            raise ImportBlocked("Quellidentität des offenen Vorgangs ist widersprüchlich")
+                        if target.exists() and filesystem.snapshot(target) == expected:
+                            raise ImportBlocked("Quelle und Ziel des offenen Vorgangs sind gleichzeitig vorhanden")
+                        self.storage.cancel_media_move(row["operation_id"])
+                        blocked.discard(row["source_path"])
+                        continue
+                    if not target.exists() or filesystem.snapshot(target) != expected:
+                        raise ImportBlocked("Erwartete Datei des offenen Vorgangs ist nicht eindeutig vorhanden")
+                    if filesystem.snapshot(target, sync=True) != expected:
+                        raise ImportBlocked("Ziel hat sich während des Abschlusses verändert")
+                    _fsync_directory(target.parent)
+                    _fsync_directory(source.parent)
+                    self.storage.complete_media_move(row["operation_id"])
+                    blocked.discard(row["source_path"])
+                except (ImportBlocked, filesystem.FilesystemBlocked, ValueError, KeyError, TypeError) as exc:
+                    self.storage.block_media_move(
+                        row["operation_id"], f"Offene Verschiebung muss manuell geprüft werden: {exc}"
+                    )
+                except OSError as exc:
+                    self.storage.update_media_import(
+                        row["source_path"], "blocked",
+                        f"Abschluss der Verschiebung noch offen: {exc}",
+                        target_path=row["target_path"],
+                    )
+        return blocked
 
     @staticmethod
     def _best_effort_signature(path: Path) -> str:
@@ -975,119 +988,6 @@ def _signature(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _manifest(
-    path: Path, ignored_relatives: frozenset[str] = frozenset()
-) -> dict[str, tuple[str, int, str]]:
-    items = [(".", path)] if path.is_file() else [
-        (item.relative_to(path).as_posix(), item) for item in path.rglob("*")
-    ]
-    result: dict[str, tuple[str, int, str]] = {}
-    for relative, item in items:
-        if relative in ignored_relatives:
-            continue
-        details = item.lstat()
-        if stat.S_ISLNK(details.st_mode):
-            raise ImportBlocked("Kopie enthält unerwartet einen symbolischen Link")
-        if stat.S_ISDIR(details.st_mode):
-            result[relative] = ("directory", 0, "")
-            continue
-        if not stat.S_ISREG(details.st_mode):
-            raise ImportBlocked("Kopie enthält einen nicht unterstützten Dateityp")
-        result[relative] = ("file", details.st_size, _file_digest(item))
-    return result
-
-
-def _file_digest(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(4 * 1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _verify_copy(
-    source: Path,
-    destination: Path,
-    destination_markers: frozenset[str] = frozenset(),
-) -> None:
-    if _manifest(source) != _manifest(destination, destination_markers):
-        raise OSError("Prüfsummenvergleich der kopierten Dateien ist fehlgeschlagen")
-
-
-def _fsync_tree(path: Path) -> None:
-    if path.is_file():
-        files = [path]
-        directories: list[Path] = []
-    else:
-        descendants = list(path.rglob("*"))
-        files = [item for item in descendants if item.is_file()]
-        directories = sorted(
-            [path, *(item for item in descendants if item.is_dir())],
-            key=lambda item: len(item.parts),
-            reverse=True,
-        )
-    for item in files:
-        with item.open("rb") as handle:
-            os.fsync(handle.fileno())
-    for directory in directories:
-        _fsync_directory(directory)
-
-
-def _remove_stage(path: Path) -> None:
-    try:
-        if path.is_symlink():
-            path.unlink()
-        elif path.is_dir():
-            shutil.rmtree(path)
-        elif path.exists():
-            path.unlink()
-    except OSError:
-        LOGGER.exception("Zwischenstand %s konnte nicht bereinigt werden", path)
-
-
-def _publish_without_overwrite(stage: Path, target: Path) -> None:
-    """Publish staged content without ever replacing an existing target."""
-    if stage.is_file():
-        os.link(stage, target)
-        _fsync_directory(target.parent)
-        stage.unlink()
-        return
-
-    final_mode = stage.stat().st_mode & 0o777
-    target.mkdir(mode=0o700, exist_ok=False)
-    # Jellyfin 12 excludes a directory while a .ignore file is present. This
-    # prevents its file watcher from observing a partially published release.
-    marker = target / ".ignore"
-    ownership_marker = target / INCOMPLETE_MARKER
-    try:
-        marker.touch(mode=0o600)
-        ownership_marker.touch(mode=0o600)
-        shutil.copytree(stage, target, dirs_exist_ok=True, copy_function=os.link)
-        # copytree applies the source mode to the root. Keep it writable until
-        # the private markers have been removed.
-        target.chmod(0o700)
-        _verify_copy(
-            stage,
-            target,
-            frozenset({marker.name, ownership_marker.name}),
-        )
-        _fsync_tree(target)
-        marker.unlink()
-        _fsync_directory(target)
-        ownership_marker.unlink()
-        _set_directory_mode_and_fsync(target, final_mode)
-        _fsync_directory(target.parent)
-        shutil.rmtree(stage)
-    except BaseException:
-        # Never remove anything from the Shows tree automatically. The source
-        # remains in Income and the private markers identify this target for
-        # manual review.
-        LOGGER.exception(
-            "Unvollständiges Ziel %s bleibt zur manuellen Prüfung erhalten", target
-        )
-        raise
-
-
 def _prepare_staging_root(shows_root: Path) -> Path:
     staging_root = shows_root / ".newtvshowsng2-staging"
     if staging_root.is_symlink():
@@ -1113,17 +1013,17 @@ def _prepare_staging_root(shows_root: Path) -> Path:
 
 @contextmanager
 def _exclusive_import_lock(staging_root: Path) -> Iterator[None]:
-    lock_path = staging_root / ".import.lock"
     flags = os.O_CREAT | os.O_RDWR
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
-    descriptor = os.open(lock_path, flags, 0o640)
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-        yield
-    finally:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
-        os.close(descriptor)
+    with filesystem.open_path(staging_root) as directory:
+        descriptor = os.open(".import.lock", flags, 0o640, dir_fd=directory)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            yield
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
 
 
 def _ensure_directory(path: Path) -> bool:
@@ -1152,20 +1052,10 @@ def _recover_incomplete_target(target: Path) -> None:
 
 
 def _fsync_directory(path: Path) -> None:
-    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
-    try:
+    with filesystem.open_path(path) as descriptor:
+        if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            raise ImportBlocked("Zu synchronisierender Pfad ist kein Verzeichnis")
         os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
-def _set_directory_mode_and_fsync(path: Path, mode: int) -> None:
-    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        os.fchmod(descriptor, mode)
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
 
 
 def _parsed_path_context(video: Path, series_path: Path) -> tuple[ParsedRelease, ...]:

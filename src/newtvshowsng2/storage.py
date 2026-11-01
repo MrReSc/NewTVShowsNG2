@@ -62,6 +62,15 @@ CREATE TABLE IF NOT EXISTS media_imports (
 );
 CREATE INDEX IF NOT EXISTS media_imports_last_seen
     ON media_imports(last_seen_at DESC);
+CREATE TABLE IF NOT EXISTS media_moves (
+    operation_id TEXT PRIMARY KEY,
+    source_path TEXT NOT NULL UNIQUE,
+    target_path TEXT NOT NULL,
+    identity_json TEXT NOT NULL,
+    metadata_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'prepared'
+);
 """
 
 
@@ -482,18 +491,69 @@ class Storage:
             return None
         return str(row["target_path"])
 
+    def pending_media_moves(self) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            return [dict(row) for row in connection.execute("SELECT * FROM media_moves")]
+
+    def prepare_media_move(
+        self, operation_id: str, source_path: str, target_path: str,
+        identity: dict, metadata: dict,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO media_moves (operation_id, source_path, target_path, "
+                "identity_json, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (operation_id, source_path, target_path, json.dumps(identity),
+                 json.dumps(metadata), _iso(datetime.now(UTC))),
+            )
+
+    def cancel_media_move(self, operation_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM media_moves WHERE operation_id = ?", (operation_id,))
+
+    def block_media_move(self, operation_id: str, reason: str) -> None:
+        with self._connect() as connection:
+            connection.execute("UPDATE media_moves SET state = 'manual' WHERE operation_id = ?", (operation_id,))
+            connection.execute(
+                "UPDATE media_imports SET status = 'blocked', reason = ? WHERE source_path = "
+                "(SELECT source_path FROM media_moves WHERE operation_id = ?)",
+                (reason, operation_id),
+            )
+
+    def complete_media_move(self, operation_id: str) -> None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM media_moves WHERE operation_id = ?", (operation_id,)
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("Vorgangsprotokoll für Verschiebung fehlt")
+            metadata = json.loads(row["metadata_json"])
+            updated = connection.execute(
+                "UPDATE media_imports SET status = 'transferred', reason = ?, "
+                "target_path = ?, transferred_at = ?, parsed_title = ?, season = ?, "
+                "episode = ? WHERE source_path = ?",
+                ("Atomar verschoben", row["target_path"], _iso(datetime.now(UTC)),
+                 metadata["parsed_title"], metadata["season"], metadata["episode"], row["source_path"]),
+            )
+            if updated.rowcount != 1:
+                raise RuntimeError("Importeintrag für die offene Verschiebung fehlt")
+            self._set_many(connection, {"library_refresh_pending": "1"})
+            connection.execute("DELETE FROM media_moves WHERE operation_id = ?", (operation_id,))
+
     def forget_unseen_media_imports(self, seen_paths: set[str]) -> int:
         with self._connect() as connection:
             if seen_paths:
                 placeholders = ", ".join("?" for _ in seen_paths)
                 deleted = connection.execute(
                     f"DELETE FROM media_imports WHERE status != 'transferred' "
+                    f"AND NOT EXISTS (SELECT 1 FROM media_moves WHERE media_moves.source_path = media_imports.source_path) "
                     f"AND source_path NOT IN ({placeholders})",
                     tuple(sorted(seen_paths)),
                 )
             else:
                 deleted = connection.execute(
-                    "DELETE FROM media_imports WHERE status != 'transferred'"
+                    "DELETE FROM media_imports WHERE status != 'transferred' "
+                    "AND NOT EXISTS (SELECT 1 FROM media_moves WHERE media_moves.source_path = media_imports.source_path)"
                 )
         return deleted.rowcount
 
@@ -525,6 +585,7 @@ class Storage:
         connection = sqlite3.connect(self.path, timeout=30)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=FULL")
         connection.execute("PRAGMA foreign_keys=ON")
         try:
             with connection:

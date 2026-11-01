@@ -20,8 +20,8 @@ services:
       TZ: ${TZ:-Europe/Zurich}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       MEDIA_IMPORT_ENABLED: ${MEDIA_IMPORT_ENABLED:-true}
-      INCOME_DIR: /income
-      SHOWS_DIR: /shows
+      INCOME_DIR: ${INCOME_DIR:-/media/Downloads_NAS}
+      SHOWS_DIR: ${SHOWS_DIR:-/media/Serien/Watched}
       JELLYFIN_SHOWS_PATH: ${JELLYFIN_SHOWS_PATH:-/data/tvshows}
       IMPORT_STABLE_HOURS: ${IMPORT_STABLE_HOURS:-1}
       PUID: ${PUID:-1000}
@@ -30,13 +30,8 @@ services:
       - ./data:/data
       - ./out:/out
       - type: bind
-        source: ${INCOME_HOST_PATH:?INCOME_HOST_PATH muss gesetzt sein}
-        target: /income
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${SHOWS_HOST_PATH:?SHOWS_HOST_PATH muss gesetzt sein}
-        target: /shows
+        source: ${MEDIA_HOST_PATH:?MEDIA_HOST_PATH muss gesetzt sein}
+        target: /media
         bind:
           create_host_path: false
 ```
@@ -53,8 +48,9 @@ MAX_HISTORY=300
 TZ=Europe/Zurich
 LOG_LEVEL=INFO
 MEDIA_IMPORT_ENABLED=true
-INCOME_HOST_PATH=/volume1/Media/Serien/Income
-SHOWS_HOST_PATH=/volume1/Media/Serien/Watched
+MEDIA_HOST_PATH=/volume1/Media
+INCOME_DIR=/media/Downloads_NAS
+SHOWS_DIR=/media/Serien/Watched
 # Pfad desselben Watched-Ordners aus Sicht des Jellyfin-Containers:
 JELLYFIN_SHOWS_PATH=/data/tvshows
 IMPORT_STABLE_HOURS=1

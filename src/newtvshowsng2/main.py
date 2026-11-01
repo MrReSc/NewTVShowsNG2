@@ -34,6 +34,14 @@ def main() -> None:
     renderer.render()
 
     scanner = Scanner(config, storage, renderer)
+    if scanner.importer is not None:
+        try:
+            scanner.importer._validate_mounts()
+            scanner.importer.recover_moves()
+        except Exception as exc:
+            LOGGER.error("Vorprüfung des Medienimports fehlgeschlagen: %s", exc)
+            storage.set_automatic_import_error(str(exc))
+        renderer.render()
     stop_event = threading.Event()
 
     def feed_scheduler() -> None:

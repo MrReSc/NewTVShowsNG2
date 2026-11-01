@@ -1,11 +1,14 @@
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 import logging
+import shutil
+import sqlite3
 from pathlib import Path
 
 import pytest
 
 from newtvshowsng2.config import Config
+from newtvshowsng2 import filesystem
 from newtvshowsng2.jellyfin import JellyfinError
 from newtvshowsng2.media_importer import MediaImporter
 import newtvshowsng2.media_importer as media_importer_module
@@ -533,173 +536,117 @@ def test_conflicting_remote_provider_ids_block_existing_series(tmp_path) -> None
     assert "widersprüchliche Provider-IDs" in storage.media_imports()[0]["reason"]
 
 
-@pytest.mark.parametrize("force", [False, True])
-def test_checksum_mismatch_keeps_source_and_creates_no_target(
-    tmp_path, monkeypatch, force
-) -> None:
-    jellyfin = Jellyfin()
-    config, storage, importer = setup(tmp_path, jellyfin)
+@pytest.mark.parametrize("folder", [False, True])
+def test_atomic_move_preserves_inodes_without_copying_or_reading_payload(tmp_path, monkeypatch, folder):
+    config, storage, importer = setup(tmp_path, Jellyfin())
     series = config.shows_dir / "Bookie"
     series.mkdir()
-    source = config.income_dir / "Bookie.S01E01.mkv"
-    source.write_bytes(b"correct")
+    name = "Bookie.S01E01.German"
+    source = release_folder(config.income_dir, name) if folder else config.income_dir / f"{name}.mkv"
+    if not folder:
+        with source.open("wb") as handle:
+            handle.truncate(2_000_000_000)
+    else:
+        (source / "subtitles.srt").write_text("subtitle")
+    source.chmod(0o750 if folder else 0o640)
+    original = filesystem.snapshot(source)
     library = Library([Series("bookie", "Bookie", path="/media/tv/Bookie")])
-    started = datetime(2026, 9, 28, 10, tzinfo=UTC)
-    importer.run(library, started)
+    original_open = Path.open
 
-    def corrupt_copy(_source, destination, *args, **kwargs):
-        Path(destination).write_bytes(b"xxxxxxx")
+    def guard_open(path, *args, **kwargs):
+        if path.suffix in {".mkv", ".srt"}:
+            raise AssertionError("Medieninhalt darf nicht geöffnet werden")
+        return original_open(path, *args, **kwargs)
 
-    monkeypatch.setattr(media_importer_module.shutil, "copy2", corrupt_copy)
-    elapsed = timedelta(minutes=1) if force else timedelta(hours=1)
-    result = importer.run(library, started + elapsed, force=force)
+    def no_copy(*args, **kwargs):
+        raise AssertionError("Kopierfunktion darf nicht aufgerufen werden")
 
-    assert result.blocked == 1
-    assert source.read_bytes() == b"correct"
-    assert not (series / "Staffel 01").exists()
-    assert "Prüfsummenvergleich" in storage.media_imports()[0]["reason"]
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "open", guard_open)
+        for method in ("copy2", "copytree", "copyfile", "move"):
+            patch.setattr(shutil, method, no_copy)
+        result = importer.run(library, force=True)
+    target = series / "Staffel 01" / source.name
+    assert result.transferred == 1
+    assert not source.exists()
+    assert filesystem.snapshot(target) == original
+    assert not storage.pending_media_moves()
+    if folder:
+        assert (target / "subtitles.srt").read_text() == "subtitle"
 
 
-def test_source_change_after_publish_keeps_both_copies_for_review(
-    tmp_path, monkeypatch
-) -> None:
-    jellyfin = Jellyfin()
-    config, storage, importer = setup(tmp_path, jellyfin)
+@pytest.mark.parametrize("force", [False, True])
+def test_source_change_before_rename_is_blocked(tmp_path, monkeypatch, force):
+    config, storage, importer = setup(tmp_path, Jellyfin())
     series = config.shows_dir / "Bookie"
     series.mkdir()
     source = config.income_dir / "Bookie.S01E01.mkv"
     source.write_bytes(b"original")
     library = Library([Series("bookie", "Bookie", path="/media/tv/Bookie")])
-    started = datetime(2026, 9, 28, 10, tzinfo=UTC)
-    importer.run(library, started)
-    original_publish = media_importer_module._publish_without_overwrite
+    now = datetime.now(UTC)
+    importer.run(library, now)
+    original_prepare = storage.prepare_media_move
 
-    def publish_then_change(stage, target):
-        original_publish(stage, target)
-        source.write_bytes(b"changed after publish")
+    def prepare_then_change(*args):
+        original_prepare(*args)
+        source.write_bytes(b"changed")
 
-    monkeypatch.setattr(
-        media_importer_module, "_publish_without_overwrite", publish_then_change
-    )
-    result = importer.run(library, started + timedelta(hours=1))
-
-    target = series / "Staffel 01" / source.name
-    assert result.transferred == 1
-    assert source.read_bytes() == b"changed after publish"
-    assert target.read_bytes() == b"original"
-    assert "manuellen Kontrolle" in storage.media_imports()[0]["reason"]
-    assert jellyfin.refresh_calls == 1
+    monkeypatch.setattr(storage, "prepare_media_move", prepare_then_change)
+    result = importer.run(library, now + timedelta(hours=2), force=force)
+    assert result.blocked == 1
+    assert source.read_bytes() == b"changed"
+    assert not (series / "Staffel 01" / source.name).exists()
+    assert not storage.pending_media_moves()
 
 
-def test_interruption_after_publication_preserves_pending_jellyfin_scan(
-    tmp_path, monkeypatch
-) -> None:
+@pytest.mark.parametrize("after_rename", [False, True])
+def test_interruption_is_recovered_before_income_cleanup(tmp_path, monkeypatch, after_rename):
     jellyfin = Jellyfin()
     config, storage, importer = setup(tmp_path, jellyfin)
     series = config.shows_dir / "Bookie"
     series.mkdir()
     source = config.income_dir / "Bookie.S01E01.mkv"
     source.write_bytes(b"episode")
+    original = source.stat().st_ino
     library = Library([Series("bookie", "Bookie", path="/media/tv/Bookie")])
-    started = datetime(2026, 9, 28, 10, tzinfo=UTC)
-    importer.run(library, started)
-    original_publish = media_importer_module._publish_without_overwrite
+    original_rename = filesystem.rename_noreplace
 
-    def publish_then_interrupt(stage, target):
-        original_publish(stage, target)
+    def interrupt(*args):
+        if after_rename:
+            original_rename(*args)
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(
-        media_importer_module, "_publish_without_overwrite", publish_then_interrupt
-    )
-    with pytest.raises(KeyboardInterrupt):
-        importer.run(library, started + timedelta(hours=1))
-
-    assert source.exists()
-    assert (series / "Staffel 01" / source.name).exists()
-    assert storage.library_refresh_pending()
-
-    monkeypatch.setattr(
-        media_importer_module, "_publish_without_overwrite", original_publish
-    )
-    result = importer.run(library, started + timedelta(hours=2))
-
-    assert jellyfin.refresh_calls == 1
-    assert not storage.library_refresh_pending()
-    assert result.blocked == 1
-
-
-def test_publish_failure_keeps_source_and_does_not_delete_from_shows(
-    tmp_path, monkeypatch
-) -> None:
-    remote = RemoteSeries("New Show", 2026, (("Imdb", "tt1234567"),))
-    jellyfin = Jellyfin([remote])
-    config, _, importer = setup(tmp_path, jellyfin)
-    source = release_folder(config.income_dir, "New.Show.2026.S01E01.German")
-    started = datetime(2026, 9, 28, 10, tzinfo=UTC)
-    importer.run(Library([]), started)
-
-    def fail_publish(_stage, _target):
-        raise OSError("simulated publish failure")
-
-    monkeypatch.setattr(
-        media_importer_module, "_publish_without_overwrite", fail_publish
-    )
-    result = importer.run(Library([]), started + timedelta(hours=1))
-
-    assert result.blocked == 1
-    assert source.exists()
-    new_series = config.shows_dir / "New Show (2026) [imdbid-tt1234567]"
-    assert (new_series / "Staffel 01").is_dir()
-    assert list((new_series / "Staffel 01").iterdir()) == []
+    with monkeypatch.context() as patch:
+        patch.setattr(filesystem, "rename_noreplace", interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            importer.run(library, force=True)
+    assert len(storage.pending_media_moves()) == 1
+    storage.forget_unseen_media_imports(set())
+    assert storage.media_import(source.name) is not None
+    importer.observe()
+    assert not storage.pending_media_moves()
+    if after_rename:
+        target = series / "Staffel 01" / source.name
+        assert not source.exists()
+        assert target.stat().st_ino == original
+        assert storage.media_import(source.name)["status"] == "transferred"
+        assert storage.library_refresh_pending()
+    else:
+        assert source.exists()
+    importer.run(library, force=True)
+    assert jellyfin.refresh_calls >= 1
 
 
-def test_partial_directory_publication_is_left_untouched_for_review(
-    tmp_path, monkeypatch
-) -> None:
-    jellyfin = Jellyfin()
-    config, _, importer = setup(tmp_path, jellyfin)
+@pytest.mark.parametrize("folder", [False, True])
+def test_fsync_failure_after_rename_preserves_target_and_retries_completion(tmp_path, monkeypatch, folder):
+    config, storage, importer = setup(tmp_path, Jellyfin())
     series = config.shows_dir / "Bookie"
     series.mkdir()
-    source = release_folder(config.income_dir, "Bookie.S01E01.German")
+    source = release_folder(config.income_dir, "Bookie.S01E01.German") if folder else config.income_dir / "Bookie.S01E01.mkv"
+    if not folder:
+        source.write_bytes(b"episode")
+    original = filesystem.snapshot(source)
     library = Library([Series("bookie", "Bookie", path="/media/tv/Bookie")])
-    started = datetime(2026, 9, 28, 10, tzinfo=UTC)
-    importer.run(library, started)
-    original_verify = media_importer_module._verify_copy
-    calls = 0
-
-    def fail_target_verification(source_path, destination, markers=frozenset()):
-        nonlocal calls
-        calls += 1
-        if calls == 2:
-            raise OSError("simulated target verification failure")
-        return original_verify(source_path, destination, markers)
-
-    monkeypatch.setattr(
-        media_importer_module, "_verify_copy", fail_target_verification
-    )
-    result = importer.run(library, started + timedelta(hours=1))
-    target = series / "Staffel 01" / source.name
-
-    assert result.blocked == 1
-    assert source.exists()
-    assert target.is_dir()
-    assert (target / ".ignore").exists()
-    assert (target / ".newtvshowsng2-incomplete").exists()
-
-
-def test_file_publication_error_does_not_remove_new_target(
-    tmp_path, monkeypatch
-) -> None:
-    jellyfin = Jellyfin()
-    config, _, importer = setup(tmp_path, jellyfin)
-    series = config.shows_dir / "Bookie"
-    series.mkdir()
-    source = config.income_dir / "Bookie.S01E01.mkv"
-    source.write_bytes(b"episode")
-    library = Library([Series("bookie", "Bookie", path="/media/tv/Bookie")])
-    started = datetime(2026, 9, 28, 10, tzinfo=UTC)
-    importer.run(library, started)
     original_fsync = media_importer_module._fsync_directory
 
     def fail_target_parent(path):
@@ -707,13 +654,151 @@ def test_file_publication_error_does_not_remove_new_target(
             raise OSError("simulated directory fsync failure")
         return original_fsync(path)
 
-    monkeypatch.setattr(media_importer_module, "_fsync_directory", fail_target_parent)
-    result = importer.run(library, started + timedelta(hours=1))
+    with monkeypatch.context() as patch:
+        patch.setattr(media_importer_module, "_fsync_directory", fail_target_parent)
+        result = importer.run(library, force=True)
     target = series / "Staffel 01" / source.name
-
     assert result.blocked == 1
-    assert source.exists()
-    assert target.read_bytes() == b"episode"
+    assert not source.exists()
+    assert filesystem.snapshot(target) == original
+    assert "Bereits verschoben" in storage.media_import(source.name)["reason"]
+    assert storage.pending_media_moves()
+    importer.observe()
+    assert not storage.pending_media_moves()
+    assert storage.media_import(source.name)["status"] == "transferred"
+
+
+@pytest.mark.parametrize("failure", ["prepare", "complete"])
+def test_database_failure_preserves_data_and_durable_intent(tmp_path, monkeypatch, failure):
+    config, storage, importer = setup(tmp_path, Jellyfin())
+    series = config.shows_dir / "Bookie"
+    series.mkdir()
+    source = config.income_dir / "Bookie.S01E01.mkv"
+    source.write_bytes(b"episode")
+    original = source.stat().st_ino
+    library = Library([Series("bookie", "Bookie", path="/media/tv/Bookie")])
+
+    def fail(*args):
+        raise sqlite3.OperationalError("simulated database failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(storage, f"{failure}_media_move", fail)
+        if failure == "prepare":
+            with pytest.raises(sqlite3.OperationalError):
+                importer.run(library, force=True)
+        else:
+            assert importer.run(library, force=True).blocked == 1
+    if failure == "prepare":
+        assert source.stat().st_ino == original
+        assert not storage.pending_media_moves()
+    else:
+        assert not source.exists()
+        assert storage.pending_media_moves()
+        importer.observe()
+        assert not storage.pending_media_moves()
+        assert (series / "Staffel 01" / source.name).stat().st_ino == original
+
+
+@pytest.mark.parametrize("error", [filesystem.FilesystemBlocked("Dateisystemgrenze"), OSError("denied")])
+def test_rename_failure_keeps_source_and_existing_media(tmp_path, monkeypatch, error):
+    config, storage, importer = setup(tmp_path, Jellyfin())
+    series = config.shows_dir / "Bookie"
+    series.mkdir()
+    source = release_folder(config.income_dir, "Bookie.S01E01.German")
+    before = filesystem.snapshot(source)
+    library = Library([Series("bookie", "Bookie", path="/media/tv/Bookie")])
+
+    def fail(*args):
+        raise error
+
+    monkeypatch.setattr(filesystem, "rename_noreplace", fail)
+    assert importer.run(library, force=True).blocked == 1
+    assert filesystem.snapshot(source) == before
+    assert not (series / "Staffel 01" / source.name).exists()
+    assert not storage.pending_media_moves()
+
+
+@pytest.mark.parametrize("folder", [False, True])
+def test_concurrently_created_target_is_never_overwritten(tmp_path, monkeypatch, folder):
+    config, storage, importer = setup(tmp_path, Jellyfin())
+    series = config.shows_dir / "Bookie"
+    series.mkdir()
+    source = release_folder(config.income_dir, "Bookie.S01E01.German") if folder else config.income_dir / "Bookie.S01E01.mkv"
+    if not folder:
+        source.write_bytes(b"source")
+    expected = filesystem.snapshot(source)
+    target = series / "Staffel 01" / source.name
+    original = filesystem.rename_noreplace
+
+    def race(*args):
+        if folder:
+            target.mkdir()
+            (target / "existing.mkv").write_bytes(b"existing")
+        else:
+            target.write_bytes(b"existing")
+        original(*args)
+
+    monkeypatch.setattr(filesystem, "rename_noreplace", race)
+    library = Library([Series("bookie", "Bookie", path="/media/tv/Bookie")])
+    assert importer.run(library, force=True).blocked == 1
+    assert filesystem.snapshot(source) == expected
+    assert (target / "existing.mkv" if folder else target).read_bytes() == b"existing"
+    assert not storage.pending_media_moves()
+
+
+@pytest.mark.parametrize("change", ["missing_target", "changed_target", "new_source"])
+def test_ambiguous_recovery_stays_blocked_and_preserves_remaining_data(tmp_path, monkeypatch, change):
+    config, storage, importer = setup(tmp_path, Jellyfin())
+    series = config.shows_dir / "Bookie"
+    series.mkdir()
+    source = config.income_dir / "Bookie.S01E01.mkv"
+    source.write_bytes(b"original")
+    target = series / "Staffel 01" / source.name
+    original = filesystem.rename_noreplace
+
+    def interrupt(*args):
+        original(*args)
+        raise KeyboardInterrupt
+
+    library = Library([Series("bookie", "Bookie", path="/media/tv/Bookie")])
+    with monkeypatch.context() as patch:
+        patch.setattr(filesystem, "rename_noreplace", interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            importer.run(library, force=True)
+    if change == "missing_target":
+        target.unlink()
+    elif change == "changed_target":
+        target.write_bytes(b"changed")
+    else:
+        source.write_bytes(b"new download")
+    before = filesystem.snapshot(config.income_dir), filesystem.snapshot(series)
+    importer.observe()
+    assert storage.pending_media_moves()[0]["state"] == "manual"
+    assert storage.media_import(source.name)["status"] == "blocked"
+    assert importer.run(library, force=True).blocked == 1
+    assert (filesystem.snapshot(config.income_dir), filesystem.snapshot(series)) == before
+
+
+def test_fsync_failure_before_rename_keeps_source_without_open_intent(tmp_path, monkeypatch):
+    config, storage, importer = setup(tmp_path, Jellyfin())
+    series = config.shows_dir / "Bookie"
+    series.mkdir()
+    source = config.income_dir / "Bookie.S01E01.mkv"
+    source.write_bytes(b"original")
+    expected = filesystem.snapshot(source)
+    original = filesystem.snapshot_fd
+
+    def fail_sync(descriptor, *, sync=False):
+        if sync:
+            raise OSError("simulated source fsync failure")
+        return original(descriptor)
+
+    monkeypatch.setattr(filesystem, "snapshot_fd", fail_sync)
+    library = Library([Series("bookie", "Bookie", path="/media/tv/Bookie")])
+    assert importer.run(library, force=True).blocked == 1
+    assert filesystem.snapshot(source) == expected
+    assert not storage.pending_media_moves()
+    assert not (series / "Staffel 01" / source.name).exists()
 
 
 def test_show_name_containing_sample_is_a_main_video(tmp_path) -> None:
@@ -797,38 +882,15 @@ def test_symlinked_existing_series_cannot_escape_shows_root(tmp_path) -> None:
     assert "symbolischen Link" in storage.media_imports()[0]["reason"]
 
 
-def test_source_is_reimported_if_previous_target_was_removed(
-    tmp_path, monkeypatch
-) -> None:
-    jellyfin = Jellyfin()
-    config, _, importer = setup(tmp_path, jellyfin)
-    series_folder = config.shows_dir / "Bookie (2023)"
-    series_folder.mkdir()
-    source = config.income_dir / "Bookie.S02E09.German.mkv"
-    source.write_bytes(b"episode")
-    library = Library(
-        [Series("bookie", "Bookie", production_year=2023, path="/media/tv/Bookie (2023)")]
-    )
-    started = datetime(2026, 9, 28, 10, tzinfo=UTC)
-    original_unlink = Path.unlink
-
-    def deny_source_unlink(path, *args, **kwargs):
-        if path == source:
-            raise PermissionError("test source remains")
-        return original_unlink(path, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "unlink", deny_source_unlink)
-    importer.run(library, started)
-    first = importer.run(library, started + timedelta(hours=1))
-    target = series_folder / "Staffel 02" / source.name
-
-    assert first.transferred == 1
-    assert source.exists()
-    assert target.exists()
-
-    original_unlink(target)
-    second = importer.run(library, started + timedelta(hours=2))
-
-    assert second.transferred == 1
-    assert source.exists()
-    assert target.read_bytes() == b"episode"
+def test_new_source_at_same_name_is_not_lost_after_previous_import(tmp_path):
+    config, storage, importer = setup(tmp_path, Jellyfin())
+    series = config.shows_dir / "Bookie"
+    series.mkdir()
+    source = config.income_dir / "Bookie.S01E01.mkv"
+    source.write_bytes(b"first")
+    library = Library([Series("bookie", "Bookie", path="/media/tv/Bookie")])
+    assert importer.run(library, force=True).transferred == 1
+    source.write_bytes(b"second")
+    assert importer.run(library, force=True).blocked == 1
+    assert source.read_bytes() == b"second"
+    assert (series / "Staffel 01" / source.name).read_bytes() == b"first"

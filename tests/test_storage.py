@@ -106,7 +106,7 @@ def test_initialize_migrates_existing_database_without_data_loss(tmp_path) -> No
             for r in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
-        } == {"announcements", "app_state", "media_imports"}
+        } == {"announcements", "app_state", "media_imports", "media_moves"}
 
 
 def test_initialize_expands_legacy_season_range_idempotently(tmp_path) -> None:
