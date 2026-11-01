@@ -125,6 +125,49 @@ def test_manual_import_failure_does_not_change_feed_status(tmp_path) -> None:
     assert storage.state()["manual_import_error"] == "Jellyfin nicht erreichbar"
 
 
+def test_single_instance_serializes_imports_and_rejects_income_scan_while_busy(tmp_path) -> None:
+    cfg, storage, renderer = setup(tmp_path)
+    cfg = replace(cfg, media_import_enabled=True)
+    entered = Event()
+    release = Event()
+    scheduled_started = Event()
+
+    class BlockingImporter(CountingImporter):
+        def run(self, library, now, *, force):
+            if force:
+                entered.set()
+                assert release.wait(timeout=3)
+            return super().run(library, now, force=force)
+
+    importer = BlockingImporter()
+    scanner = Scanner(
+        cfg, storage, renderer, Jellyfin(Library([])), CountingFeeds(), importer
+    )
+
+    def scheduled_import():
+        scheduled_started.set()
+        scanner.run_scheduled_import()
+
+    scheduled = Thread(target=scheduled_import)
+    try:
+        assert scanner.start_manual("import")
+        assert entered.wait(timeout=3)
+        assert scanner.scan_income() is None
+        assert not scanner.start_manual("import")
+        scheduled.start()
+        assert scheduled_started.wait(timeout=3)
+        assert importer.calls == []
+        release.set()
+        scheduled.join(timeout=3)
+        assert not scheduled.is_alive()
+        wait_for(lambda: not scanner._lock.locked())
+        assert importer.calls == [True, False]
+    finally:
+        release.set()
+        if scheduled.ident is not None:
+            scheduled.join(timeout=3)
+
+
 def test_interrupted_manual_import_is_reported_after_restart(tmp_path) -> None:
     _, storage, _ = setup(tmp_path)
     storage.begin_manual_import(datetime(2026, 9, 29, 10, tzinfo=UTC))

@@ -10,6 +10,7 @@ Die Architecture Decision Records (ADR) halten die verbindlichen Architekturents
 | [0004](0004-jellyfin-und-mediendaten-schuetzen.md) | Jellyfin und bestehende Mediendaten schützen | Angenommen |
 | [0005](0005-bei-unklarheiten-nachfragen.md) | Bei Unklarheiten vor der Umsetzung nachfragen | Angenommen |
 | [0006](0006-atomare-medienverschiebung.md) | Atomare Medienverschiebung ohne Inhaltsprüfsummen | Angenommen |
+| [0007](0007-eine-anwendungsinstanz-ohne-dateisperre.md) | Eine Anwendungsinstanz ohne Dateisperre | Angenommen |
 
 Der Status «Angenommen» beschreibt die verbindliche Entscheidung. Er bestätigt nicht, dass die bestehende Implementierung sie bereits vollständig erfüllt. Bekannte Abweichungen sind in den betroffenen ADRs beschrieben. Diese Dokumentation allein migriert keine Daten und ändert kein Laufzeitverhalten.
 

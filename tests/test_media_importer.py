@@ -571,6 +571,7 @@ def test_atomic_move_preserves_inodes_without_copying_or_reading_payload(tmp_pat
     assert not source.exists()
     assert filesystem.snapshot(target) == original
     assert not storage.pending_media_moves()
+    assert not (config.shows_dir / ".newtvshowsng2-staging").exists()
     if folder:
         assert (target / "subtitles.srt").read_text() == "subtitle"
 
@@ -625,6 +626,7 @@ def test_interruption_is_recovered_before_income_cleanup(tmp_path, monkeypatch, 
     assert storage.media_import(source.name) is not None
     importer.observe()
     assert not storage.pending_media_moves()
+    assert not (config.shows_dir / ".newtvshowsng2-staging").exists()
     if after_rename:
         target = series / "Staffel 01" / source.name
         assert not source.exists()

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import fcntl
 import json
 import logging
 import os
@@ -11,8 +10,6 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
-from contextlib import contextmanager
-from collections.abc import Iterator
 
 from . import filesystem
 from .config import Config
@@ -813,67 +810,66 @@ class MediaImporter:
     ) -> tuple[Path, str | None]:
         target = _contained_path(self.config.shows_dir, season_path / unit.path.name)
         source_relative = unit.path.relative_to(self.config.income_dir).as_posix()
-        with _exclusive_import_lock(_prepare_staging_root(self.config.shows_dir)):
-            _recover_incomplete_target(target)
-            if target.exists():
-                raise ImportBlocked("Ein gleichnamiges Ziel existiert bereits")
-            try:
-                _ensure_directory(series_path)
-                _ensure_directory(season_path)
-                filesystem.check_pair(unit.path, season_path)
-                with (
-                    filesystem.open_path(unit.path.parent) as source_parent,
-                    filesystem.open_path(season_path) as target_parent,
-                    filesystem.open_path(unit.path) as source_fd,
-                ):
-                    expected = filesystem.snapshot_fd(source_fd, sync=True)
+        _recover_incomplete_target(target)
+        if target.exists():
+            raise ImportBlocked("Ein gleichnamiges Ziel existiert bereits")
+        try:
+            _ensure_directory(series_path)
+            _ensure_directory(season_path)
+            filesystem.check_pair(unit.path, season_path)
+            with (
+                filesystem.open_path(unit.path.parent) as source_parent,
+                filesystem.open_path(season_path) as target_parent,
+                filesystem.open_path(unit.path) as source_fd,
+            ):
+                expected = filesystem.snapshot_fd(source_fd, sync=True)
+                if _signature(unit.path) != unit.signature:
+                    raise ImportBlocked("Quelle hat sich vor dem Verschieben verändert")
+                parsed = self._parse_source(unit)
+                if parsed is None:
+                    raise ImportBlocked("Quelle ist vor dem Verschieben nicht mehr lesbar zugeordnet")
+                operation_id = uuid.uuid4().hex
+                self.storage.prepare_media_move(
+                    operation_id, source_relative,
+                    target.relative_to(self.config.shows_dir.resolve()).as_posix(),
+                    expected,
+                    {"parsed_title": parsed.series_title, "season": parsed.season,
+                     "episode": parsed.episode},
+                )
+                moved = False
+                try:
+                    # The namespace change must not precede its durable intent.
+                    _fsync_directory(series_path.parent)
+                    _fsync_directory(series_path)
+                    os.fsync(source_parent)
+                    os.fsync(target_parent)
+                    current = os.stat(
+                        unit.path.name, dir_fd=source_parent, follow_symlinks=False
+                    )
+                    if (current.st_dev, current.st_ino) != (expected["."][0], expected["."][2]):
+                        raise ImportBlocked("Quellidentität hat sich vor dem Verschieben verändert")
                     if _signature(unit.path) != unit.signature:
                         raise ImportBlocked("Quelle hat sich vor dem Verschieben verändert")
-                    parsed = self._parse_source(unit)
-                    if parsed is None:
-                        raise ImportBlocked("Quelle ist vor dem Verschieben nicht mehr lesbar zugeordnet")
-                    operation_id = uuid.uuid4().hex
-                    self.storage.prepare_media_move(
-                        operation_id, source_relative,
-                        target.relative_to(self.config.shows_dir.resolve()).as_posix(),
-                        expected,
-                        {"parsed_title": parsed.series_title, "season": parsed.season,
-                         "episode": parsed.episode},
+                    filesystem.rename_noreplace(
+                        source_parent, unit.path.name, target_parent, target.name
                     )
-                    moved = False
-                    try:
-                        # The namespace change must not precede its durable intent.
-                        _fsync_directory(series_path.parent)
-                        _fsync_directory(series_path)
-                        os.fsync(source_parent)
-                        os.fsync(target_parent)
-                        current = os.stat(
-                            unit.path.name, dir_fd=source_parent, follow_symlinks=False
-                        )
-                        if (current.st_dev, current.st_ino) != (expected["."][0], expected["."][2]):
-                            raise ImportBlocked("Quellidentität hat sich vor dem Verschieben verändert")
-                        if _signature(unit.path) != unit.signature:
-                            raise ImportBlocked("Quelle hat sich vor dem Verschieben verändert")
-                        filesystem.rename_noreplace(
-                            source_parent, unit.path.name, target_parent, target.name
-                        )
-                        moved = True
-                        if filesystem.snapshot(target) != expected:
-                            raise ImportBlocked("Identität am Ziel stimmt nach dem Verschieben nicht überein")
-                        _fsync_directory(target.parent)
-                        _fsync_directory(unit.path.parent)
-                        self.storage.complete_media_move(operation_id)
-                    except Exception as exc:
-                        # A rename can have succeeded even if a later step failed.
-                        if moved or not unit.path.exists():
-                            self.storage.set_library_refresh_pending(True)
-                            raise ImportBlocked(
-                                f"Bereits verschoben nach {target}. Abschluss noch offen: {exc}"
-                            ) from exc
-                        self.storage.cancel_media_move(operation_id)
-                        raise
-            except filesystem.FilesystemBlocked as exc:
-                raise ImportBlocked(str(exc)) from exc
+                    moved = True
+                    if filesystem.snapshot(target) != expected:
+                        raise ImportBlocked("Identität am Ziel stimmt nach dem Verschieben nicht überein")
+                    _fsync_directory(target.parent)
+                    _fsync_directory(unit.path.parent)
+                    self.storage.complete_media_move(operation_id)
+                except Exception as exc:
+                    # A rename can have succeeded even if a later step failed.
+                    if moved or not unit.path.exists():
+                        self.storage.set_library_refresh_pending(True)
+                        raise ImportBlocked(
+                            f"Bereits verschoben nach {target}. Abschluss noch offen: {exc}"
+                        ) from exc
+                    self.storage.cancel_media_move(operation_id)
+                    raise
+        except filesystem.FilesystemBlocked as exc:
+            raise ImportBlocked(str(exc)) from exc
         return target, None
 
     def recover_moves(self) -> set[str]:
@@ -882,40 +878,39 @@ class MediaImporter:
         if not pending:
             return blocked
         self._validate_mounts()
-        with _exclusive_import_lock(_prepare_staging_root(self.config.shows_dir)):
-            for row in self.storage.pending_media_moves():
-                if row["state"] == "manual":
-                    continue
-                try:
-                    source = _contained_path(self.config.income_dir, self.config.income_dir / row["source_path"])
-                    target = _contained_path(self.config.shows_dir, self.config.shows_dir / row["target_path"])
-                    expected = json.loads(row["identity_json"])
-                    if source.exists():
-                        if filesystem.snapshot(source) != expected:
-                            raise ImportBlocked("Quellidentität des offenen Vorgangs ist widersprüchlich")
-                        if target.exists() and filesystem.snapshot(target) == expected:
-                            raise ImportBlocked("Quelle und Ziel des offenen Vorgangs sind gleichzeitig vorhanden")
-                        self.storage.cancel_media_move(row["operation_id"])
-                        blocked.discard(row["source_path"])
-                        continue
-                    if not target.exists() or filesystem.snapshot(target) != expected:
-                        raise ImportBlocked("Erwartete Datei des offenen Vorgangs ist nicht eindeutig vorhanden")
-                    if filesystem.snapshot(target, sync=True) != expected:
-                        raise ImportBlocked("Ziel hat sich während des Abschlusses verändert")
-                    _fsync_directory(target.parent)
-                    _fsync_directory(source.parent)
-                    self.storage.complete_media_move(row["operation_id"])
+        for row in self.storage.pending_media_moves():
+            if row["state"] == "manual":
+                continue
+            try:
+                source = _contained_path(self.config.income_dir, self.config.income_dir / row["source_path"])
+                target = _contained_path(self.config.shows_dir, self.config.shows_dir / row["target_path"])
+                expected = json.loads(row["identity_json"])
+                if source.exists():
+                    if filesystem.snapshot(source) != expected:
+                        raise ImportBlocked("Quellidentität des offenen Vorgangs ist widersprüchlich")
+                    if target.exists() and filesystem.snapshot(target) == expected:
+                        raise ImportBlocked("Quelle und Ziel des offenen Vorgangs sind gleichzeitig vorhanden")
+                    self.storage.cancel_media_move(row["operation_id"])
                     blocked.discard(row["source_path"])
-                except (ImportBlocked, filesystem.FilesystemBlocked, ValueError, KeyError, TypeError) as exc:
-                    self.storage.block_media_move(
-                        row["operation_id"], f"Offene Verschiebung muss manuell geprüft werden: {exc}"
-                    )
-                except OSError as exc:
-                    self.storage.update_media_import(
-                        row["source_path"], "blocked",
-                        f"Abschluss der Verschiebung noch offen: {exc}",
-                        target_path=row["target_path"],
-                    )
+                    continue
+                if not target.exists() or filesystem.snapshot(target) != expected:
+                    raise ImportBlocked("Erwartete Datei des offenen Vorgangs ist nicht eindeutig vorhanden")
+                if filesystem.snapshot(target, sync=True) != expected:
+                    raise ImportBlocked("Ziel hat sich während des Abschlusses verändert")
+                _fsync_directory(target.parent)
+                _fsync_directory(source.parent)
+                self.storage.complete_media_move(row["operation_id"])
+                blocked.discard(row["source_path"])
+            except (ImportBlocked, filesystem.FilesystemBlocked, ValueError, KeyError, TypeError) as exc:
+                self.storage.block_media_move(
+                    row["operation_id"], f"Offene Verschiebung muss manuell geprüft werden: {exc}"
+                )
+            except OSError as exc:
+                self.storage.update_media_import(
+                    row["source_path"], "blocked",
+                    f"Abschluss der Verschiebung noch offen: {exc}",
+                    target_path=row["target_path"],
+                )
         return blocked
 
     @staticmethod
@@ -986,44 +981,6 @@ def _signature(path: Path) -> str:
             ).encode(errors="surrogateescape")
         )
     return digest.hexdigest()
-
-
-def _prepare_staging_root(shows_root: Path) -> Path:
-    staging_root = shows_root / ".newtvshowsng2-staging"
-    if staging_root.is_symlink():
-        raise ImportBlocked("Staging-Verzeichnis ist ein symbolischer Link")
-    created = False
-    try:
-        staging_root.mkdir(mode=0o750, exist_ok=False)
-        created = True
-    except FileExistsError:
-        pass
-    staging_root = _contained_path(shows_root, staging_root)
-    if not staging_root.is_dir():
-        raise ImportBlocked("Staging-Pfad ist kein Verzeichnis")
-    ignore_file = staging_root / ".ignore"
-    if ignore_file.is_symlink():
-        raise ImportBlocked("Staging-.ignore ist ein symbolischer Link")
-    if created:
-        ignore_file.touch(mode=0o640)
-    elif not ignore_file.is_file():
-        raise ImportBlocked("Staging-.ignore ist keine Datei")
-    return staging_root
-
-
-@contextmanager
-def _exclusive_import_lock(staging_root: Path) -> Iterator[None]:
-    flags = os.O_CREAT | os.O_RDWR
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    with filesystem.open_path(staging_root) as directory:
-        descriptor = os.open(".import.lock", flags, 0o640, dir_fd=directory)
-        try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
-            yield
-        finally:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
-            os.close(descriptor)
 
 
 def _ensure_directory(path: Path) -> bool:

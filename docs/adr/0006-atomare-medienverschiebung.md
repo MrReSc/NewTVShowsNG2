@@ -4,6 +4,8 @@ Datum: 2026-11-01
 
 Status: Angenommen
 
+Ergänzung: [ADR 0007](0007-eine-anwendungsinstanz-ohne-dateisperre.md) legt den Betrieb mit einer Instanz und interner Serialisierung ohne zusätzliche Dateisperre fest.
+
 ## Kontext
 
 Die vollständige Kopie und wiederholte Inhaltsprüfsummen verursachen unnötige Datenträgerzugriffe, wenn Income und Shows auf demselben Dateisystem liegen. Der Auftraggeber hat einen gemeinsamen Mount und einen ausschliesslich atomaren Verschiebepfad mit Blockierung bei nicht unterstützten Konfigurationen beauftragt. Income enthält ausschliesslich fertig geschriebene Downloads.
