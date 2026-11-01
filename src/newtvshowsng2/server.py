@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 from .media_importer import SelectionUnavailable
 from .rendering import LogRenderer
 from .scanner import Scanner
-from .storage import Storage
+from .storage import AnnouncementUnavailable, Storage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,7 +41,8 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if self.path not in (
-            "/run/feed", "/run/import", "/run/income-scan", "/run/import/resolve"
+            "/run/feed", "/run/import", "/run/income-scan", "/run/import/resolve",
+            "/announcements/complete",
         ):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
@@ -57,6 +58,9 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
         if not self._same_origin_request():
             self.send_error(HTTPStatus.FORBIDDEN, "Fremder Ursprung ist nicht erlaubt")
+            return
+        if self.path == "/announcements/complete":
+            self._complete_announcements()
             return
         if self.path == "/run/import/resolve":
             self._start_selected_import()
@@ -78,6 +82,40 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header(
             "Location", "/#overview" if self.path == "/run/feed" else "/#media-import"
         )
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _complete_announcements(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            content_type = self.headers.get("Content-Type", "").split(";", 1)[0]
+            if not 1 <= length <= 65536 or content_type != "application/x-www-form-urlencoded":
+                raise ValueError("Ungültiges Erledigt-Formular")
+            fields = parse_qs(
+                self.rfile.read(length).decode("utf-8"),
+                keep_blank_values=True,
+                strict_parsing=True,
+                max_num_fields=1000,
+            )
+            if set(fields) != {"source_key"} or any(
+                len(key) != 64 for key in fields["source_key"]
+            ):
+                raise ValueError("Ungültiges Erledigt-Formular")
+        except (UnicodeError, ValueError):
+            self.send_error(HTTPStatus.BAD_REQUEST, "Ungültiges Erledigt-Formular")
+            return
+        try:
+            self.server.scanner.complete_announcements(fields["source_key"])
+        except AnnouncementUnavailable as exc:
+            self.send_error(HTTPStatus.CONFLICT, str(exc))
+            return
+        except Exception:
+            LOGGER.exception("Feed-Einträge konnten nicht als erledigt markiert werden")
+            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Erledigt-Markierung fehlgeschlagen")
+            return
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self.send_header("Location", "/#overview")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", "0")
         self.end_headers()

@@ -160,6 +160,7 @@ def _build_release_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
     group["display_title"] = f"{base_title} · {marker}"
     group["is_new"] = any(bool(row["is_new"]) for row in rows)
     group["match_warning"] = any(bool(row["match_warning"]) for row in rows)
+    group["source_keys"] = [row["source_key"] for row in rows]
     group["variants"] = _release_variants(rows)
     return group
 

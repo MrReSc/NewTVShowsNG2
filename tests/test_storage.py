@@ -100,13 +100,20 @@ def test_initialize_migrates_existing_database_without_data_loss(tmp_path) -> No
     assert row["jellyfin_played_episode_count"] is None
     assert row["needed_episodes"] is None
     assert row["status_reason"] is None
+    assert row["completed_at"] is None
     with sqlite3.connect(path) as connection:
         assert {
             r[0]
             for r in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
-        } == {"announcements", "app_state", "media_imports", "media_moves"}
+        } == {
+            "announcements", "announcement_completions", "app_state",
+            "media_imports", "media_moves",
+        }
+        assert {
+            row[1] for row in connection.execute("PRAGMA table_info(announcement_completions)")
+        } == {"source_key", "completed_at"}
 
 
 def test_initialize_expands_legacy_season_range_idempotently(tmp_path) -> None:

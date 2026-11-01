@@ -504,6 +504,7 @@ def test_current_grouping_key_and_aggregated_fields() -> None:
     assert grouped["published_at"] == "2026-09-09T18:00:00+00:00"
     assert grouped["is_new"]
     assert grouped["match_warning"]
+    assert set(grouped["source_keys"]) == {"old", "new"}
     assert [variant["label"] for variant in grouped["variants"]] == [
         "1080p · WAYNE",
         "1080p · WvF",
@@ -515,6 +516,7 @@ def test_unknown_quality_links_are_numbered() -> None:
     for number in (1, 2):
         rows.append(
             {
+                "source_key": f"source-{number}",
                 "feed_url": "https://feed.test/rss",
                 "matched_series_id": "show",
                 "matched_series_name": "Show",

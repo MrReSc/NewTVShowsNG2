@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS announcements (
 );
 CREATE INDEX IF NOT EXISTS announcements_published
     ON announcements(published_at DESC);
+CREATE TABLE IF NOT EXISTS announcement_completions (
+    source_key TEXT PRIMARY KEY,
+    completed_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS app_state (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -72,6 +76,10 @@ CREATE TABLE IF NOT EXISTS media_moves (
     state TEXT NOT NULL DEFAULT 'prepared'
 );
 """
+
+
+class AnnouncementUnavailable(RuntimeError):
+    pass
 
 
 class Storage:
@@ -351,6 +359,34 @@ class Storage:
                 )
             }
 
+    def complete_announcements(
+        self, source_keys: list[str], completed_at: datetime
+    ) -> None:
+        keys = tuple(dict.fromkeys(source_keys))
+        if not keys:
+            raise ValueError("Feed-Einträge fehlen")
+        placeholders = ", ".join("?" for _ in keys)
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            known = {
+                row["source_key"]
+                for row in connection.execute(
+                    f"SELECT source_key FROM announcements WHERE source_key IN ({placeholders}) "
+                    f"UNION SELECT source_key FROM announcement_completions "
+                    f"WHERE source_key IN ({placeholders})",
+                    (*keys, *keys),
+                )
+            }
+            if known != set(keys):
+                raise AnnouncementUnavailable("Feed-Eintrag ist nicht mehr verfügbar")
+            # Markierungen überleben die Historienbereinigung, damit erneut
+            # gelesene Feed-Einträge nicht wieder als offene Aufgabe erscheinen.
+            connection.executemany(
+                "INSERT INTO announcement_completions (source_key, completed_at) "
+                "VALUES (?, ?) ON CONFLICT(source_key) DO NOTHING",
+                ((key, _iso(completed_at)) for key in keys),
+            )
+
     def prune(self, max_history: int) -> None:
         with self._connect() as connection:
             count = connection.execute("SELECT COUNT(*) FROM announcements").fetchone()[
@@ -362,8 +398,10 @@ class Storage:
             connection.execute(
                 """
                 DELETE FROM announcements WHERE source_key IN (
-                    SELECT source_key FROM announcements
-                    ORDER BY is_current ASC, published_at ASC, first_seen_at ASC
+                    SELECT a.source_key FROM announcements AS a
+                    LEFT JOIN announcement_completions AS c USING (source_key)
+                    ORDER BY (a.is_current = 1 AND c.completed_at IS NULL) ASC,
+                        a.published_at ASC, a.first_seen_at ASC
                     LIMIT ?
                 )
                 """,
@@ -371,10 +409,13 @@ class Storage:
             )
 
     def announcements(self, current_only: bool = False) -> list[dict[str, Any]]:
-        query = "SELECT * FROM announcements"
+        query = (
+            "SELECT a.*, c.completed_at FROM announcements AS a "
+            "LEFT JOIN announcement_completions AS c USING (source_key)"
+        )
         if current_only:
-            query += " WHERE is_current = 1"
-        query += " ORDER BY published_at DESC, first_seen_at DESC"
+            query += " WHERE a.is_current = 1 AND c.completed_at IS NULL"
+        query += " ORDER BY a.published_at DESC, a.first_seen_at DESC"
         with self._connect() as connection:
             rows = [dict(row) for row in connection.execute(query).fetchall()]
         for row in rows:

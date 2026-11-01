@@ -82,6 +82,11 @@ class Scanner:
                     LOGGER.exception("Importfehler konnte nicht angezeigt werden")
                 return False
 
+    def complete_announcements(self, source_keys: list[str]) -> None:
+        with self._lock:
+            self.storage.complete_announcements(source_keys, datetime.now(UTC))
+            self.renderer.render()
+
     def scan_income(self) -> bool | None:
         if self.importer is None or not self.config.media_import_enabled:
             raise ValueError("Medienimport ist deaktiviert")

@@ -122,6 +122,10 @@
     .status-col { width: 14%; }
     .date-col { width: 20%; color: var(--muted); }
     .badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .complete-action { margin: 10px 0 0; }
+    .complete-action button { padding: 5px 9px; border: 1px solid #3d6661; border-radius: 5px; background: var(--accent-soft); color: var(--link); font: inherit; font-size: .75rem; cursor: pointer; }
+    .complete-action button:hover { background: #17433e; }
+    .complete-action button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     .badge { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border: 1px solid transparent; border-radius: 5px; font-size: .7rem; font-weight: 800; line-height: 1.2; }
     .badge.new { border-color: #286d65; background: var(--accent-soft); color: var(--accent); }
     .badge.open, .badge.warning { border-color: #765e35; background: var(--warning-soft); color: #f4d69f; }
@@ -316,19 +320,28 @@
                       {{ row.jellyfin_episode_count or 0 }} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %} vorhanden
                       <small>{% if row.jellyfin_played_episode_count is not none %}{{ row.jellyfin_played_episode_count }}{% else %}?{% endif %} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %} gesehen</small>
                       <small>Episoden in S{{ "%02d" | format(row.season) }}</small>
-                      {% if row.needed_episodes %}
+                      {% if not row.completed_at and row.needed_episodes %}
                         <small>Noch benötigt: {% for number in row.needed_episodes %}E{{ "%02d" | format(number) }}{% if not loop.last %}, {% endif %}{% endfor %}</small>
-                      {% elif row.is_current and row.episode is none %}
+                      {% elif not row.completed_at and row.is_current and row.episode is none %}
                         <small>Sollbestand unbekannt</small>
                       {% endif %}
                     </td>
                     <td class="status-col" data-label="Status">
                       <div class="badge-row">
-                        {% if row.is_new %}<span class="badge new">Neu</span>{% endif %}
-                        {% if row.is_current %}<span class="badge open">Fehlend</span>
+                        {% if row.is_new and not row.completed_at %}<span class="badge new">Neu</span>{% endif %}
+                        {% if row.completed_at %}<span class="badge done">Erledigt</span>
+                        {% elif row.is_current %}<span class="badge open">Fehlend</span>
                         {% else %}<span class="badge done">{{ {"available": "Vorhanden", "played": "Gesehen", "covered": "Vorhanden/gesehen", "removed": "Serie nicht mehr vorhanden"}.get(row.status_reason, "Status noch nicht geprüft") }}</span>{% endif %}
                         {% if row.match_warning %}<span class="badge warning">Zuordnung prüfen</span>{% endif %}
                       </div>
+                      {% if current_panel %}
+                        <form class="complete-action" method="post" action="/announcements/complete">
+                          {% for source_key in row.source_keys %}
+                            <input type="hidden" name="source_key" value="{{ source_key }}">
+                          {% endfor %}
+                          <button type="submit" aria-label="{{ row.display_title }} als erledigt markieren">Erledigt</button>
+                        </form>
+                      {% endif %}
                     </td>
                     <td class="date-col" data-label="Datum">{{ row.published_at | local_datetime }}</td>
                   {% endif %}
