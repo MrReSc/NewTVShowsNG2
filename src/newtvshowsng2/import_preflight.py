@@ -14,9 +14,17 @@ def main() -> int:
         uid = _numeric_id("PUID", 10001)
         gid = _numeric_id("PGID", 10001)
         if os.geteuid() == 0:
+            identity_changed = os.geteuid() != uid or os.getegid() != gid
             os.setgroups([])
             os.setgid(gid)
             os.setuid(uid)
+            if identity_changed:
+                # A credential change restricts proc ownership on older kernels.
+                # Re-exec matches the service entrypoint without widening rights.
+                os.execv(
+                    sys.executable,
+                    [sys.executable, "-m", "newtvshowsng2.import_preflight"],
+                )
         elif os.geteuid() != uid or os.getegid() != gid:
             raise FilesystemBlocked("Diagnose muss unter den konfigurierten PUID und PGID laufen")
         config = Config.from_env()

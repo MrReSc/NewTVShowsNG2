@@ -1,6 +1,8 @@
 import ctypes
 import errno
 import os
+import subprocess
+import sys
 import struct
 from dataclasses import replace
 from pathlib import Path
@@ -127,16 +129,12 @@ def test_diagnostic_runs_read_only_with_configured_identity(tmp_path, monkeypatc
     monkeypatch.setenv("PUID", "1234")
     monkeypatch.setenv("PGID", "5678")
     monkeypatch.setattr(import_preflight.Config, "from_env", lambda: config)
-    monkeypatch.setattr(os, "geteuid", lambda: 0)
-    calls = []
-    monkeypatch.setattr(os, "setgroups", lambda groups: calls.append(("groups", groups)))
-    monkeypatch.setattr(os, "setgid", lambda gid: calls.append(("gid", gid)))
-    monkeypatch.setattr(os, "setuid", lambda uid: calls.append(("uid", uid)))
+    monkeypatch.setattr(os, "geteuid", lambda: 1234)
+    monkeypatch.setattr(os, "getegid", lambda: 5678)
     if not valid:
         shows.rmdir()
     before = filesystem.snapshot(tmp_path)
     assert import_preflight.main() == (0 if valid else 1)
-    assert calls == [("groups", []), ("gid", 5678), ("uid", 1234)]
     assert filesystem.snapshot(tmp_path) == before
     output = capsys.readouterr()
     assert "secret" not in output.out + output.err
@@ -151,3 +149,101 @@ def test_diagnostic_does_not_claim_success_for_wrong_uid(monkeypatch, capsys):
     monkeypatch.setattr(os, "getegid", lambda: 1000)
     assert import_preflight.main() == 1
     assert "PUID" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("uid,gid", [(1234, 5678), (0, 5678), (1234, 0)])
+def test_diagnostic_reexecutes_after_credential_change_before_filesystem_access(monkeypatch, uid, gid):
+    monkeypatch.setenv("PUID", str(uid))
+    monkeypatch.setenv("PGID", str(gid))
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(os, "getegid", lambda: 0)
+    calls = []
+    monkeypatch.setattr(os, "setgroups", lambda groups: calls.append(("groups", groups)))
+    monkeypatch.setattr(os, "setgid", lambda value: calls.append(("gid", value)))
+    monkeypatch.setattr(os, "setuid", lambda value: calls.append(("uid", value)))
+
+    class Reexecuted(Exception):
+        pass
+
+    def restart(executable, arguments):
+        calls.append(("exec", executable, arguments))
+        raise Reexecuted
+
+    def no_access(*args):
+        raise AssertionError("Vor dem Neustart dürfen keine Pfade geprüft werden")
+
+    monkeypatch.setattr(os, "execv", restart)
+    monkeypatch.setattr(import_preflight.Config, "from_env", no_access)
+    with pytest.raises(Reexecuted):
+        import_preflight.main()
+    assert calls == [
+        ("groups", []), ("gid", gid), ("uid", uid),
+        ("exec", sys.executable, [sys.executable, "-m", "newtvshowsng2.import_preflight"]),
+    ]
+
+
+def test_diagnostic_with_unchanged_root_identity_does_not_loop(monkeypatch):
+    monkeypatch.setenv("PUID", "0")
+    monkeypatch.setenv("PGID", "0")
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(os, "getegid", lambda: 0)
+    monkeypatch.setattr(os, "setgroups", lambda groups: None)
+    monkeypatch.setattr(os, "setgid", lambda value: None)
+    monkeypatch.setattr(os, "setuid", lambda value: None)
+    config = Config("http://unused", "secret", ("http://unused",), "unused")
+    monkeypatch.setattr(import_preflight.Config, "from_env", lambda: config)
+    monkeypatch.setattr(import_preflight, "preflight", lambda *args: {})
+
+    def unexpected(*args):
+        raise AssertionError("Unveränderte Identität darf keine Neustartschleife auslösen")
+
+    monkeypatch.setattr(os, "execv", unexpected)
+    assert import_preflight.main() == 0
+
+
+def test_reexec_restores_normal_proc_state_before_real_read_only_diagnostic(tmp_path):
+    income, shows = tmp_path / "income", tmp_path / "shows"
+    income.mkdir()
+    shows.mkdir()
+    environment = {
+        **os.environ, "PUID": str(os.geteuid()), "PGID": str(os.getegid()),
+        "INCOME_DIR": str(income), "SHOWS_DIR": str(shows),
+        "JELLYFIN_URL": "http://unused.invalid", "JELLYFIN_API_KEY": "unused",
+        "JELLYFIN_USERNAME": "unused", "RSS_URLS": "http://unused.invalid",
+    }
+    check = (
+        "import ctypes; from newtvshowsng2.import_preflight import main; "
+        "assert ctypes.CDLL(None).prctl(3, 0, 0, 0, 0) == 1; "
+        "raise SystemExit(main())"
+    )
+    launcher = (
+        "import ctypes, os, sys; libc = ctypes.CDLL(None); "
+        "assert libc.prctl(4, 0, 0, 0, 0) == 0; "
+        "assert libc.prctl(3, 0, 0, 0, 0) == 0; "
+        "os.execv(sys.executable, [sys.executable, '-c', sys.argv[1]])"
+    )
+    before = filesystem.snapshot(tmp_path)
+    result = subprocess.run(
+        [sys.executable, "-c", launcher, check], env=environment,
+        capture_output=True, text=True, timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Vorprüfung erfolgreich" in result.stdout
+    assert filesystem.snapshot(tmp_path) == before
+
+
+def test_cifs_identity_does_not_query_remote_btrfs_subvolumes(tmp_path, monkeypatch):
+    income, shows = tmp_path / "income", tmp_path / "shows"
+    income.mkdir()
+    shows.mkdir()
+    mount_types = filesystem._mount_types()
+    monkeypatch.setattr(filesystem, "_mount_types", lambda: {mount: "cifs" for mount in mount_types})
+
+    def unexpected(*args):
+        raise AssertionError("SMB gibt keine lokalen Btrfs-Untervolume-IDs zurück")
+
+    monkeypatch.setattr(filesystem, "_subvolume", unexpected)
+    result = filesystem.preflight(income, shows)
+    assert result["income"] == result["shows"]
+    assert result["income"]["filesystem"] == "cifs"
+    assert result["income"]["subvolume"] is None
