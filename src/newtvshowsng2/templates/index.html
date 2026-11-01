@@ -251,7 +251,7 @@
                     <td class="date-col" data-label="Details">
                       {{ item.reason or 'Wartet auf Importprüfung' }}
                       {% if media_import_enabled and item.status == 'needs_selection' %}
-                        <br><a href="/media-import/resolve?source={{ item.source_path | urlencode }}">Jellyfin-Treffer prüfen und Serie wählen</a>
+                        <br><a href="/media-import/resolve?source={{ item.source_path | urlencode }}">Serie zuordnen</a>
                       {% endif %}
                     </td>
                   </tr>

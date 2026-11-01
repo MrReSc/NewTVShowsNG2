@@ -72,6 +72,7 @@ class SeriesChoice:
     remote: RemoteSeries
     key: str
     imdb_url: str | None
+    existing_series: Series | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +89,7 @@ class SelectedSeries:
     signature: str
     parsed: ParsedRelease
     remote: RemoteSeries
+    existing_series_id: str | None = None
 
 
 class SelectionUnavailable(ValueError):
@@ -157,9 +159,18 @@ class MediaImporter:
             )
         if parsed is None or parsed.episode is None or parsed.season != parsed.season_end:
             raise SelectionUnavailable("Serie und Episode sind nicht mehr eindeutig lesbar")
-        candidates = self._remote_candidates(parsed)
+        results = self._remote_search_results(parsed)
+        candidates = self._remote_candidates(parsed, results=results)
+        if not candidates and len(results) == 1:
+            library = self.jellyfin.load_library()
+            try:
+                choice = self._existing_series_choice(parsed, results, library)
+            except ImportBlocked as exc:
+                raise SelectionUnavailable(str(exc)) from exc
+            if choice is not None:
+                return SelectionOptions(source_path, unit.signature, parsed, (choice,))
         if len(candidates) < 2:
-            raise SelectionUnavailable("Jellyfin meldet keine mehrdeutige Serienauswahl mehr")
+            raise SelectionUnavailable("Jellyfin meldet keine passende Serienauswahl mehr")
         choices = tuple(
             SeriesChoice(remote, _choice_key(remote), _imdb_url(remote))
             for remote in candidates
@@ -179,7 +190,11 @@ class MediaImporter:
             raise SelectionUnavailable(
                 "Jellyfin-Suchergebnis wurde verändert; bitte Auswahl neu öffnen"
             )
-        return SelectedSeries(source_path, signature, options.parsed, matches[0].remote)
+        choice = matches[0]
+        return SelectedSeries(
+            source_path, signature, options.parsed, choice.remote,
+            choice.existing_series.id if choice.existing_series is not None else None,
+        )
 
     def run(
         self, library: Library, now: datetime | None = None, *,
@@ -284,6 +299,9 @@ class MediaImporter:
                 target_series, display_name, jellyfin_series = self._resolve_series(
                     parsed, library, new_series, new_series_paths,
                     selected_remote=selection.remote if selection is not None else None,
+                    selected_series_id=(
+                        selection.existing_series_id if selection is not None else None
+                    ),
                 )
                 season_path = self._resolve_season_path(
                     target_series, parsed.season
@@ -485,7 +503,26 @@ class MediaImporter:
         new_series_paths: set[Path],
         *,
         selected_remote: RemoteSeries | None = None,
+        selected_series_id: str | None = None,
     ) -> tuple[Path, str, Series | None]:
+        if selected_series_id is not None:
+            series = next(
+                (item for item in library.series if item.id == selected_series_id), None
+            )
+            if series is None:
+                raise ImportBlocked("Gewählte Jellyfin-Serie ist nicht mehr vorhanden")
+            provider_matches = (
+                _series_with_remote_provider(selected_remote, library.series)
+                if selected_remote is not None else []
+            )
+            if len(provider_matches) != 1 or provider_matches[0].id != series.id:
+                raise ImportBlocked(
+                    "Gewählte Jellyfin-Serie stimmt nicht mehr mit den Provider-IDs überein"
+                )
+            if parsed.year is not None and parsed.year != series.production_year:
+                raise ImportBlocked("Jellyfin-Serienjahr widerspricht dem Release-Jahr")
+            return self._existing_series_path(series), series.name, series
+
         match = match_release(parsed, library.series)
         if match is not None:
             if match.warning:
@@ -507,13 +544,32 @@ class MediaImporter:
             target, display_name = new_series[identity]
             return target, display_name, None
 
+        candidates = None
         if selected_remote is None:
+            search_error = None
+            if library.series:
+                try:
+                    results = self._remote_search_results(parsed)
+                except ImportBlocked as exc:
+                    # Ein API-Ausfall soll die bisherige Warteprüfung nicht verändern.
+                    search_error = exc
+                else:
+                    candidates = self._remote_candidates(parsed, results=results)
+                    if not candidates and self._existing_series_choice(
+                        parsed, results, library
+                    ) is not None:
+                        raise ImportSelectionRequired(
+                            "Jellyfin-Titel weicht vom Release-Titel ab. "
+                            "Vorhandene Serie bitte bestätigen"
+                        )
             pending = self._pending_jellyfin_folder(parsed)
             if pending is not None:
                 raise ImportWaiting(
                     f"Wartet auf Jellyfin-Bibliothekseintrag für {pending.name}"
                 )
-        remote = selected_remote or self._unique_remote_match(parsed)
+            if search_error is not None:
+                raise search_error
+        remote = selected_remote or self._unique_remote_match(parsed, candidates=candidates)
         provider_matches = _series_with_remote_provider(remote, library.series)
         if len(provider_matches) > 1:
             raise ImportBlocked(
@@ -628,8 +684,11 @@ class MediaImporter:
             self.config.shows_dir, series_path / f"Staffel {season:02d}"
         )
 
-    def _unique_remote_match(self, parsed: ParsedRelease) -> RemoteSeries:
-        candidates = self._remote_candidates(parsed)
+    def _unique_remote_match(
+        self, parsed: ParsedRelease, *, candidates: list[RemoteSeries] | None = None
+    ) -> RemoteSeries:
+        if candidates is None:
+            candidates = self._remote_candidates(parsed)
         if len(candidates) > 1:
             raise ImportSelectionRequired(
                 "Neue Serie ist nicht eindeutig zugeordnet; mehrere Jellyfin-Treffer passen"
@@ -640,19 +699,46 @@ class MediaImporter:
             )
         return candidates[0]
 
-    def _remote_candidates(self, parsed: ParsedRelease) -> list[RemoteSeries]:
+    def _existing_series_choice(
+        self, parsed: ParsedRelease, results: list[RemoteSeries], library: Library
+    ) -> SeriesChoice | None:
+        if len(results) != 1:
+            return None
+        remote = results[0]
+        if parsed.year is not None and parsed.year != remote.production_year:
+            return None
+        if parsed.imdb_id and parsed.imdb_id.casefold() != (
+            _provider_id(remote, "imdb") or ""
+        ).casefold():
+            return None
+        matches = _series_with_remote_provider(remote, library.series)
+        if len(matches) != 1:
+            return None
+        series = matches[0]
+        if parsed.year is not None and parsed.year != series.production_year:
+            return None
+        return SeriesChoice(
+            remote, _choice_key(remote, series.id), _imdb_url(remote), series
+        )
+
+    def _remote_search_results(self, parsed: ParsedRelease) -> list[RemoteSeries]:
         try:
             search_name = re.sub(r"[._]+", " ", parsed.series_title).strip()
             if parsed.year is not None:
                 search_name = re.sub(
                     rf"\s*\(?{parsed.year}\)?\s*$", "", search_name
                 ).strip()
-            results = self.jellyfin.search_series(
+            return self.jellyfin.search_series(
                 search_name, parsed.year, parsed.imdb_id
             )
         except JellyfinError as exc:
             raise ImportBlocked(f"Jellyfin-Metadatensuche fehlgeschlagen: {exc}") from exc
 
+    def _remote_candidates(
+        self, parsed: ParsedRelease, *, results: list[RemoteSeries] | None = None
+    ) -> list[RemoteSeries]:
+        if results is None:
+            results = self._remote_search_results(parsed)
         identified: list[RemoteSeries] = []
         for result in results:
             ids = {
@@ -853,13 +939,16 @@ def _imdb_url(series: RemoteSeries) -> str | None:
     return None
 
 
-def _choice_key(series: RemoteSeries) -> str:
+def _choice_key(series: RemoteSeries, existing_series_id: str | None = None) -> str:
+    identity = [
+        normalize_title(series.name),
+        series.production_year,
+        sorted((key.casefold(), value.casefold()) for key, value in series.provider_ids),
+    ]
+    if existing_series_id is not None:
+        identity.append(existing_series_id)
     payload = json.dumps(
-        [
-            normalize_title(series.name),
-            series.production_year,
-            sorted((key.casefold(), value.casefold()) for key, value in series.provider_ids),
-        ],
+        identity,
         ensure_ascii=False,
         separators=(",", ":"),
     )

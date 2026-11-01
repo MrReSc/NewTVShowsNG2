@@ -30,10 +30,20 @@
     <a href="/#media-import">← Zurück zum Medienimport</a>
     <h1>Serienzuordnung wählen</h1>
     <p class="source">Download: {{ options.source_path }}</p>
-    <p>Prüfe den passenden Jellyfin-Treffer. Die Auswahl importiert alle aktuell gefundenen Folgen dieser Serie sofort. Weitere Folgen werden nach der Übernahme durch Jellyfin zugeordnet.</p>
+    {% if options.choices and options.choices[0].existing_series %}
+      <p class="source">Release-Titel: {{ options.parsed.series_title }}</p>
+      <p>Der Jellyfin-Titel weicht vom Release-Titel ab. Prüfe die vorhandene Serie. Die Auswahl importiert alle aktuell gefundenen Folgen dieser Serie sofort. Die Bestätigung gilt nur für diesen Import. Bei späteren Folgen kann erneut eine Bestätigung nötig sein.</p>
+    {% else %}
+      <p>Prüfe den passenden Jellyfin-Treffer. Die Auswahl importiert alle aktuell gefundenen Folgen dieser Serie sofort. Weitere Folgen werden nach der Übernahme durch Jellyfin zugeordnet.</p>
+    {% endif %}
     {% for choice in options.choices %}
       <section class="choice">
-        <h2>{{ choice.remote.name }}{% if choice.remote.production_year %} ({{ choice.remote.production_year }}){% endif %}</h2>
+        {% if choice.existing_series %}
+          <h2>{{ choice.existing_series.name }}</h2>
+          <p>Vorhandene Jellyfin-Serie{% if choice.existing_series.production_year %}. Serienjahr: {{ choice.existing_series.production_year }}{% endif %}</p>
+        {% else %}
+          <h2>{{ choice.remote.name }}{% if choice.remote.production_year %} ({{ choice.remote.production_year }}){% endif %}</h2>
+        {% endif %}
         <div class="ids" aria-label="Provider-IDs">
           {% for provider, value in choice.remote.provider_ids %}
             <span>{{ provider }}: {{ value }}</span>
