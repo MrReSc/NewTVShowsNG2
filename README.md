@@ -1,5 +1,3 @@
-# NewTVShowsNG2
-
 ## `compose.yaml`
 
 ```yaml
@@ -47,7 +45,7 @@ services:
 
 ```dotenv
 JELLYFIN_URL=http://192.168.0.2:8096
-JELLYFIN_API_KEY=dein-api-key
+JELLYFIN_API_KEY=hier-den-api-key-eintragen
 JELLYFIN_USERNAME=Hans
 RSS_URLS=https://example.org/serien/feed
 CHECK_INTERVAL_HOURS=1
@@ -57,15 +55,9 @@ LOG_LEVEL=INFO
 MEDIA_IMPORT_ENABLED=true
 INCOME_HOST_PATH=/volume1/Media/Serien/Income
 SHOWS_HOST_PATH=/volume1/Media/Serien/Watched
+# Pfad desselben Watched-Ordners aus Sicht des Jellyfin-Containers:
 JELLYFIN_SHOWS_PATH=/data/tvshows
 IMPORT_STABLE_HOURS=1
 PUID=1000
 PGID=1000
 ```
-
-`JELLYFIN_SHOWS_PATH` ist der Pfad desselben `Watched`-Ordners aus Sicht des
-Jellyfin-Containers. Die Anwendung vergleicht ihn vor jedem Import mit den von
-Jellyfin gemeldeten TV-Bibliothekspfaden. Dateien werden erst übernommen, wenn
-sie eine Stunde unverändert in `Income` lagen. Nicht eindeutige Zuordnungen und
-bereits vorhandene Episoden bleiben in `Income` und werden in der Weboberfläche
-angezeigt.
