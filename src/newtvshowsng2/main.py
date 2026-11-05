@@ -5,6 +5,8 @@ import signal
 import threading
 
 from .config import Config
+from .images import SeriesImageCache
+from .jellyfin import JellyfinClient
 from .logging_utils import configure_logging
 from .rendering import Renderer
 from .scanner import Scanner
@@ -71,6 +73,10 @@ def main() -> None:
         config.log_path,
         config.timezone,
         scanner,
+        images=SeriesImageCache(JellyfinClient(
+            config.jellyfin_url, config.jellyfin_api_key,
+            config.jellyfin_username, config.request_timeout,
+        )),
     )
 
     def stop(_signum: int, _frame: object) -> None:

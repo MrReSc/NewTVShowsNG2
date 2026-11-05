@@ -353,3 +353,72 @@ def test_http_failure_does_not_return_partial_inventory():
     client.load_library()
     with pytest.raises(JellyfinError, match="fehlgeschlagen"):
         client.load_series_episodes("series-1")
+
+
+def test_presentation_catalogue_does_not_load_episodes():
+    session = Session()
+    client = JellyfinClient("http://jellyfin.test", "secret", "Hans", session=session)
+
+    series = client.load_series()
+
+    assert series[0].name == "The Walking Dead: Dead City"
+    assert len(session.calls) == 1
+    assert session.calls[0][1]["enableImages"] == "false"
+    assert session.calls[0][1]["enableUserData"] == "false"
+    assert session.calls[0][1]["fields"] == "OriginalTitle,ProviderIds"
+
+
+@pytest.mark.parametrize(
+    ("status", "content_type", "content", "expected"),
+    [
+        (200, "image/jpeg", b"poster", (b"poster", "image/jpeg")),
+        (200, "image/png; charset=binary", b"poster", (b"poster", "image/png")),
+        (404, "application/json", b"missing", None),
+        (500, "application/json", b"error", JellyfinError),
+        (200, "text/html", b"error", JellyfinError),
+        (200, "image/svg+xml", b"<svg/>", JellyfinError),
+        (200, "image/jpeg", b"", JellyfinError),
+        (200, "image/jpeg", b"x" * (2 * 1024 * 1024 + 1), JellyfinError),
+    ],
+    ids=["jpeg", "png", "missing", "server-error", "html", "svg", "empty", "too-large"],
+)
+def test_primary_image_requests_fixed_thumbnail_without_credentials_in_url(
+    status, content_type, content, expected
+):
+    session = Session()
+    calls = []
+
+    def get(url, params=None, timeout=None):
+        calls.append((url, params, timeout))
+        response = Response(None, status)
+        response.headers = {"Content-Type": content_type}
+        response.content = content
+        return response
+
+    session.get = get
+    client = JellyfinClient("http://jellyfin.test/base", "secret", "Hans", session=session)
+    series_id = "13008790-f7b7-13e8-8c6e-2b63430658a7"
+    if expected is JellyfinError:
+        with pytest.raises(JellyfinError):
+            client.load_primary_image(series_id)
+    else:
+        assert client.load_primary_image(series_id) == expected
+    assert calls == [(
+        "http://jellyfin.test/base/Items/13008790f7b713e88c6e2b63430658a7/Images/Primary",
+        {"maxWidth": "80", "maxHeight": "120", "format": "Jpg"}, 20.0,
+    )]
+
+
+def test_primary_image_rejects_invalid_id_and_wraps_connection_error():
+    session = Session()
+    client = JellyfinClient("http://jellyfin.test", "secret", "Hans", session=session)
+    with pytest.raises(JellyfinError, match="Serien-ID"):
+        client.load_primary_image("../other")
+    assert session.calls == []
+
+    def disconnected(*args, **kwargs):
+        raise requests.Timeout("connection timed out")
+
+    session.get = disconnected
+    with pytest.raises(JellyfinError, match="Poster"):
+        client.load_primary_image("1" * 32)

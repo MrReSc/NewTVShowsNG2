@@ -1,0 +1,15 @@
+# Serienbilder in Fehlend und Historie
+
+Die Anwendung zeigt am linken Rand jeder Zeile ein Serienposter mit 40 × 60 Pixeln. Dies gilt für gruppierte Feed-Einträge unter Fehlend und für Feed- sowie Importeinträge in der Historie. Alle Zeilen haben innerhalb der jeweiligen Bildschirmdarstellung dieselbe Höhe. Lange Titel, Importpfade, Episodenlisten und Qualitätsvarianten bleiben innerhalb ihrer Zellen scrollbar. Bilder werden bei Bedarf geladen und verändern die Zeilenhöhe nicht.
+
+Feed-Einträge verwenden ihre bereits zugeordnete Jellyfin-Serien-ID als Bildreferenz. Bei einer mehrdeutigen Zuordnung erscheint ein Platzhalter. Importprotokolle enthalten keine Serien-ID. Für diese Einträge wird der gespeicherte Eingabetitel bei Bedarf gegen eine frisch und vollständig über die API geladene Serienliste geprüft. Nur eine eindeutige Zuordnung erhält ein Poster. Die Liste wird anschliessend verworfen. Eine fehlende oder unsichere Zuordnung bewirkt ausschliesslich einen Platzhalter und verändert weder Importstatus noch Feed-Status.
+
+Der Browser ruft /series-image mit genau einer Serien-ID oder einem Eingabetitel auf. Der Server bezieht das Primary-Bild von der konfigurierten Jellyfin-Instanz. Der [Jellyfin-Client](../src/newtvshowsng2/jellyfin.py) begrenzt die angeforderte Auflösung auf 80 × 120 Pixel. Externe SVG-Dateien und andere nicht unterstützte Antworttypen werden verworfen. Fehlt ein Bild, schlägt die API fehl oder ist die Antwort leer, erscheint der mitgelieferte Platzhalter.
+
+Der [Bildcache](../src/newtvshowsng2/images.py) hält ausschliesslich Bildantworten und deren technische Abrufreferenzen im Arbeitsspeicher. Er enthält höchstens 128 Einträge und 8 MiB Bilddaten. Erfolgreiche Bildantworten gelten eine Stunde, Platzhalter nach fehlenden Bildern oder Fehlern eine Minute. Bei Platzmangel wird die am längsten nicht verwendete Antwort entfernt. Gleichzeitig eintreffende Anfragen nach derselben Referenz werden gemeinsam bedient. Der Browser verwendet einen privaten Cache mit der verbleibenden Gültigkeitsdauer.
+
+Es gibt keine Bilddateien auf dem Datenvolume und keine Erweiterung der Datenbank. Der Bildcache ist unabhängig von Serienabgleich und Medienimport. Er wird ausschliesslich für die Darstellung verwendet und dient nie als Quelle für eine spätere fachliche Entscheidung. Dies folgt [ADR 0001](adr/0001-keine-jellyfin-schattendatenbank.md) und [ADR 0002](adr/0002-jellyfin-api-als-datenquelle.md).
+
+Der Bildabruf verwendet einen eigenen Jellyfin-Client, damit parallele Browseranfragen den laufenden Serienabgleich nicht beeinflussen. Zugangsdaten verbleiben im Server. Die vorhandene Content Security Policy erlaubt Bilder nur von derselben Anwendung. Die [API Referenz](jellyfin-api.md) nennt den verwendeten Endpunkt und die geprüfte Spezifikation.
+
+Die automatisierten Prüfungen in [test_images.py](../tests/test_images.py) und [test_jellyfin.py](../tests/test_jellyfin.py) verwenden simulierte API-Antworten. Sie prüfen insbesondere fehlende und mehrdeutige Serien, API-Ausfälle, ungültige Anfragen, Cache-Ablauf, Speicherbegrenzungen und die Ausgabe beider Ansichten.

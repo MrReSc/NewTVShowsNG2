@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from uuid import UUID
 
 import requests
 
@@ -39,6 +40,44 @@ class JellyfinClient:
                 ),
             }
         )
+
+    def load_series(self) -> list[Series]:
+        """Read a transient catalogue for presentation lookups without episodes."""
+        items = self._get_all_items(
+            {
+                "includeItemTypes": "Series",
+                "recursive": "true",
+                "fields": "OriginalTitle,ProviderIds",
+                "enableImages": "false",
+                "enableUserData": "false",
+            }
+        )
+        return [series for item in items if (series := self._to_series(item))]
+
+    def load_primary_image(self, series_id: str) -> tuple[bytes, str] | None:
+        try:
+            item_id = UUID(series_id).hex
+        except (ValueError, AttributeError) as exc:
+            raise JellyfinError("Ungültige Serien-ID für das Poster") from exc
+        path = f"/Items/{item_id}/Images/Primary"
+        try:
+            response = self.session.get(
+                f"{self.base_url}{path}",
+                params={"maxWidth": "80", "maxHeight": "120", "format": "Jpg"},
+                timeout=self.timeout,
+            )
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise JellyfinError("Jellyfin-Poster konnte nicht geladen werden") from exc
+        content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
+        content = response.content
+        if content_type not in {"image/jpeg", "image/png", "image/webp"} or not (
+            0 < len(content) <= 2 * 1024 * 1024
+        ):
+            raise JellyfinError("Jellyfin lieferte kein gültiges Poster")
+        return content, content_type
 
     def load_library(self) -> Library:
         self.user_id = None

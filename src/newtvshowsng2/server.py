@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
+from .images import SeriesImageCache, placeholder_image
 from .jellyfin import JellyfinError
 from .media_importer import SelectionUnavailable
 from .rendering import LogRenderer
@@ -29,12 +30,14 @@ class ApplicationServer(ThreadingHTTPServer):
         log_path: Path,
         timezone: str,
         scanner: Scanner | None = None,
+        images: SeriesImageCache | None = None,
     ):
         super().__init__(address, RequestHandler)
         self.output_path = output_path
         self.storage = storage
         self.log_renderer = LogRenderer(log_path, timezone)
         self.scanner = scanner
+        self.images = images
 
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -191,12 +194,43 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._serve_log()
         elif path in ("/favicon.svg", "/favicon.ico"):
             self._serve_favicon()
+        elif path in ("/series-image", "/series-placeholder.svg"):
+            self._serve_series_image(path)
         elif path == "/healthz":
             self._serve_health()
         elif path == "/media-import/resolve":
             self._serve_selection()
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
+
+    def _serve_series_image(self, path: str) -> None:
+        image = placeholder_image()
+        if path == "/series-image":
+            try:
+                query = parse_qs(
+                    urlsplit(self.path).query, keep_blank_values=True,
+                    strict_parsing=True, max_num_fields=1,
+                )
+                if set(query) not in ({"id"}, {"title"}) or any(
+                    len(values) != 1 or not values[0] for values in query.values()
+                ):
+                    raise ValueError("Ungültige Bildreferenz")
+                if self.server.images is not None:
+                    image = self.server.images.get(
+                        series_id=query.get("id", [""])[0],
+                        title=query.get("title", [""])[0],
+                    )
+            except ValueError:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Ungültige Bildreferenz")
+                return
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", image.content_type)
+        self.send_header("Content-Length", str(len(image.content)))
+        self.send_header("Cache-Control", f"private, max-age={image.max_age}")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'none'; sandbox")
+        self.end_headers()
+        self.wfile.write(image.content)
 
     def _serve_selection(self) -> None:
         scanner = self.server.scanner

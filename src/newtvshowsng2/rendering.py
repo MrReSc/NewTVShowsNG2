@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
+from .images import series_image_url
 from .logging_utils import LOG_LEVELS, LOG_PAGE_ENTRIES, read_log_entries
 from .media_importer import SelectionOptions
 from .storage import Storage
@@ -56,6 +57,7 @@ class Renderer:
             autoescape=select_autoescape(("html", "xml")),
         )
         self.environment.filters["local_datetime"] = self._local_datetime
+        self.environment.filters["series_image_url"] = series_image_url
 
     def render(self) -> None:
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
