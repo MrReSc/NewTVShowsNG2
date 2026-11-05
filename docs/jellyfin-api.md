@@ -36,7 +36,7 @@ Die Tabelle beschreibt den vorhandenen Client. Sie ist keine Freigabe für zusä
 
 Die Seriensuche verwendet einen POST-Request zur Suche. Sie ist vom Anwenden oder Ändern von Metadaten zu unterscheiden. Der Bibliotheksscan verändert den Verarbeitungszustand von Jellyfin. Eine erfolgreiche Antwort auf /Library/Refresh bestätigt nur den gestarteten Scan. Die OpenAPI Spezifikation weist dafür die Berechtigung RequiresElevation aus.
 
-Der Bildabruf wurde zusätzlich anhand der OpenAPI Spezifikation einer Jellyfin-Instanz mit Version 12.4.0 geprüft. Der Endpunkt erwartet itemId als UUID und den Bildtyp Primary. Die Anwendung verwendet maxWidth=80, maxHeight=120 und format=Jpg. Die Antwort enthält die Bilddatei. Ein fehlendes Poster wird mit HTTP 404 beantwortet. Die verkleinerte API-Antwort wird in der Oberfläche mit 40 × 60 Pixeln angezeigt.
+Der Bildabruf wurde zusätzlich anhand der OpenAPI Spezifikation einer Jellyfin-Instanz mit Version 12.4.0 geprüft. Der Endpunkt erwartet itemId als UUID und den Bildtyp Primary. Die Anwendung verwendet maxWidth=80, maxHeight=120 und format=Jpg. Die Antwort enthält die Bilddatei. Ein fehlendes Poster wird mit HTTP 404 beantwortet. Die verkleinerte API-Antwort wird in der Oberfläche mit 56 × 84 Pixeln angezeigt.
 
 Der Browser erhält eine Adresse der Anwendung unter /series-image. Nur der Server sendet den Authorization-Header an Jellyfin. Bildadressen enthalten weder den API-Schlüssel noch eine frei wählbare Zieladresse. Der [Bildabruf und Cache](series-images.md) beschreibt Zuordnung, Begrenzungen und Fehlerverhalten.
 

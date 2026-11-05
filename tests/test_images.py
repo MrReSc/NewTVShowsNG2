@@ -149,7 +149,7 @@ def test_render_includes_small_posters_in_both_views_and_import_history(tmp_path
     assert history.count('class="series-poster"') == 2
     assert f'src="/series-image?id={SERIES_ID}"' in overview
     assert 'src="/series-image?title=MobLand.S01"' in history
-    assert 'width="40" height="60" alt="" loading="lazy"' in overview
+    assert 'width="56" height="84" alt="" loading="lazy"' in overview
 
 
 def test_server_proxies_posters_and_handles_invalid_requests_without_jellyfin_writes(tmp_path):

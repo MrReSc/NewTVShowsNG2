@@ -119,9 +119,9 @@
     .release-table tbody tr:last-child td { border-bottom: 1px solid transparent; }
     .release-table .cell-content { height: 90px; overflow: auto; scrollbar-width: thin; }
     .release-table .inventory .cell-content { font-size: .9rem; line-height: 1.4; }
-    .release-layout { display: flex; align-items: center; gap: 12px; height: 90px; }
-    .series-poster { flex: 0 0 40px; width: 40px; height: 60px; object-fit: cover; border-radius: 4px; background: #252525; }
-    .release-content { flex: 1; min-width: 0; max-height: 90px; overflow: auto; scrollbar-width: thin; }
+    .release-layout { display: flex; align-items: flex-start; gap: 12px; height: 90px; }
+    .series-poster { flex: 0 0 56px; width: 56px; height: 84px; object-fit: cover; border-radius: 4px; background: #252525; }
+    .release-content { flex: 1; min-width: 0; max-height: 90px; overflow: auto; scrollbar-width: thin; line-height: 1.4; }
     .release-table .variant-links { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 3px; scrollbar-width: thin; }
     .release-table .variant-links a { flex: 0 0 auto; }
     .release-table .status-col .cell-content { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
@@ -131,7 +131,7 @@
     .variant-links a { padding: 3px 9px; border: 1px solid #48535f; border-radius: 4px; background: #20272d; color: var(--link); font-size: .73rem; font-weight: 600; text-decoration: none; }
     .variant-links a:visited { color: var(--visited); border-color: #625b69; }
     .variant-links a:hover { background: var(--control-hover); text-decoration: underline; }
-    .type-marker { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 5px; color: var(--muted); font-size: .7rem; font-weight: 750; }
+    .type-marker { display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; color: var(--muted); font-size: .7rem; font-weight: 750; }
     .type-marker svg { width: 14px; height: 14px; flex: 0 0 auto; }
     .inventory { width: 20%; white-space: nowrap; }
     .inventory small { display: block; margin-top: 2px; color: var(--muted); }
@@ -169,12 +169,12 @@
       td::before { color: var(--muted); content: attr(data-label); font-size: .68rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
       td.release { display: block; padding: 0 0 10px; font-size: .94rem; }
       td.release::before { display: none; }
-      .release-table tbody td { padding-top: 6px; padding-bottom: 6px; }
+      .release-table tbody td { padding-top: 2px; padding-bottom: 2px; }
       .release-table tbody tr { padding: 10px; }
       .release-table tbody tr:last-child td { border-bottom: 0; }
       .release-table td.release { padding-top: 0; padding-bottom: 8px; }
-      .release-table .release-layout { height: 60px; }
-      .release-table .release-content { max-height: 60px; }
+      .release-table .release-layout { height: 84px; }
+      .release-table .release-content { max-height: 84px; }
       .release-table .inventory .cell-content { height: 76px; font-size: .85rem; }
       .release-table .inventory small { font-size: .75rem; line-height: 1.25; }
       .release-table .status-col .cell-content { height: 30px; flex-direction: row; align-items: flex-start; }
@@ -310,7 +310,7 @@
     {% endmacro %}
 
     {% macro series_poster(row) %}
-      <img class="series-poster" src="{{ row | series_image_url }}" width="40" height="60" alt="" loading="lazy" decoding="async">
+      <img class="series-poster" src="{{ row | series_image_url }}" width="56" height="84" alt="" loading="lazy" decoding="async">
     {% endmacro %}
 
     {% macro release_table(rows, current_panel=false) %}
@@ -329,7 +329,7 @@
               {% for row in rows %}
                 <tr{% if not current_panel %} class="history-{{ row.kind }}"{% endif %}>
                   {% if not current_panel and row.kind == 'import' %}
-                    <td class="release" data-label="Eintrag"><div class="release-layout">{{ series_poster(row) }}<div class="release-content" tabindex="0">{{ type_marker('import') }}<span class="release-title">{{ row.source_path }}</span></div></div></td>
+                    <td class="release" data-label="Eintrag"><div class="release-layout">{{ series_poster(row) }}<div class="release-content" tabindex="0"><span class="release-title">{{ row.source_path }}</span>{{ type_marker('import') }}</div></div></td>
                     <td class="inventory" data-label="Bestand / Ziel">
                       <div class="cell-content" tabindex="0">
                       {{ row.target_path or '–' }}
@@ -349,8 +349,8 @@
                           {% endfor %}
                         </span>
                       {% else %}
-                        {{ type_marker('feed') }}
                         <span class="release-title"><a href="{{ row.link }}" title="{{ row.title }}" target="_blank" rel="noopener noreferrer">{{ row.matched_series_name }} · S{{ "%02d" | format(row.season) }}{% if row.episode is not none %}E{{ "%02d" | format(row.episode) }}{% endif %}</a></span>
+                        {{ type_marker('feed') }}
                       {% endif %}
                       </div></div>
                     </td>
