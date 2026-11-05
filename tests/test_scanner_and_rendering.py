@@ -441,8 +441,8 @@ def test_ui_labels_and_link_states_render_consistently(tmp_path) -> None:
     assert "Download ist leer" in html
     assert "Keine offenen Importe" in html
     assert 'class="section-note"' not in html
-    assert "--link: #53e4d3" in html
-    assert "--visited: #c4a0f7" in html
+    assert "--link: #a6b9c9" in html
+    assert "--visited: #b3a6bd" in html
     assert ".release a:visited { color: var(--visited); }" in html
     assert ".variant-links a:visited { color: var(--visited);" in html
 
