@@ -1,6 +1,6 @@
 # Architekturentscheidungen
 
-Die Architecture Decision Records (ADR) halten die verbindlichen Architekturentscheidungen für NewTVShowsNG2 fest. Die folgenden Entscheidungen wurden am 1. November 2026 aufgrund der Projektvorgaben angenommen.
+Die Architecture Decision Records (ADR) halten die verbindlichen Architekturentscheidungen für NewTVShowsNG2 fest. Die einzelnen ADRs nennen Datum und Status der jeweiligen Entscheidung.
 
 | ADR | Entscheidung | Status |
 | --- | --- | --- |
@@ -12,6 +12,7 @@ Die Architecture Decision Records (ADR) halten die verbindlichen Architekturents
 | [0006](0006-atomare-medienverschiebung.md) | Atomare Medienverschiebung ohne Inhaltsprüfsummen | Angenommen |
 | [0007](0007-eine-anwendungsinstanz-ohne-dateisperre.md) | Eine Anwendungsinstanz ohne Dateisperre | Angenommen |
 | [0008](0008-feed-eintraege-manuell-erledigen.md) | Feed-Einträge manuell erledigen | Angenommen |
+| [0009](0009-feed-veroeffentlichungen-unterscheiden.md) | Erneute Feed-Veröffentlichungen bei gleicher GUID unterscheiden | Angenommen |
 
 Der Status «Angenommen» beschreibt die verbindliche Entscheidung. Er bestätigt nicht, dass die bestehende Implementierung sie bereits vollständig erfüllt. Bekannte Abweichungen sind in den betroffenen ADRs beschrieben. Diese Dokumentation allein migriert keine Daten und ändert kein Laufzeitverhalten.
 

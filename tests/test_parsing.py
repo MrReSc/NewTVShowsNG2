@@ -1,4 +1,4 @@
-from datetime import UTC
+from datetime import UTC, datetime
 
 import pytest
 
@@ -132,3 +132,30 @@ def test_feed_entry_rejects_unsafe_link() -> None:
         )
         is None
     )
+
+
+def test_feed_entry_prefers_publication_over_later_content_update() -> None:
+    release = feed_entry_to_release(
+        "https://feed.test/rss",
+        {
+            "title": "Show.S01",
+            "link": "https://feed.test/show",
+            "published": "Thu, 05 Nov 2026 12:00:00 +0100",
+            "updated_parsed": (2026, 11, 6, 13, 0, 0, 4, 310, 0),
+        },
+    )
+
+    assert release is not None
+    assert release.published_at == datetime(2026, 11, 5, 11, tzinfo=UTC)
+    assert release.published_at_known
+
+
+@pytest.mark.parametrize("date", [None, "kein Datum"])
+def test_missing_or_invalid_feed_date_is_not_a_publication_time(date) -> None:
+    release = feed_entry_to_release(
+        "https://feed.test/rss",
+        {"title": "Show.S01", "link": "https://feed.test/show", "published": date},
+    )
+
+    assert release is not None
+    assert not release.published_at_known

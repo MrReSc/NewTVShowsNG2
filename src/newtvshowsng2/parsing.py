@@ -117,27 +117,27 @@ def feed_entry_to_release(feed_url: str, entry: Any) -> FeedRelease | None:
         guid=str(guid_value).strip() if guid_value else None,
         link=link,
         title=title,
-        published_at=published_at,
+        published_at=published_at or datetime.now(UTC),
         content="\n".join(content_parts),
+        published_at_known=published_at is not None,
     )
 
 
-def _entry_datetime(entry: Any) -> datetime:
-    for key in ("updated_parsed", "published_parsed"):
+def _entry_datetime(entry: Any) -> datetime | None:
+    for key in ("published_parsed", "published", "updated_parsed", "updated"):
         parsed = _entry_get(entry, key, None)
-        if parsed:
-            return datetime.fromtimestamp(calendar.timegm(parsed), tz=UTC)
-    for key in ("updated", "published"):
-        raw = _entry_get(entry, key, None)
-        if raw:
-            try:
-                parsed = parsedate_to_datetime(str(raw))
-                if parsed.tzinfo is None:
-                    parsed = parsed.replace(tzinfo=UTC)
-                return parsed.astimezone(UTC)
-            except (TypeError, ValueError, OverflowError):
-                continue
-    return datetime.now(UTC)
+        if not parsed:
+            continue
+        try:
+            if key.endswith("_parsed"):
+                return datetime.fromtimestamp(calendar.timegm(parsed), tz=UTC)
+            value = parsedate_to_datetime(str(parsed))
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=UTC)
+            return value.astimezone(UTC)
+        except (TypeError, ValueError, OverflowError):
+            continue
+    return None
 
 
 def _entry_get(entry: Any, key: str, default: Any) -> Any:

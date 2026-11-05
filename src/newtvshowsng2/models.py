@@ -46,6 +46,7 @@ class FeedRelease:
     title: str
     published_at: datetime
     content: str = ""
+    published_at_known: bool = True
 
 
 @dataclass(frozen=True, slots=True)

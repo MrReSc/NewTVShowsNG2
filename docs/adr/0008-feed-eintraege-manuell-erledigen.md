@@ -4,6 +4,8 @@ Datum: 2026-11-01
 
 Status: Angenommen
 
+Präzisierung vom 5. November 2026: [ADR 0009](0009-feed-veroeffentlichungen-unterscheiden.md) ersetzt die nachfolgende Regel zur Kennung einer Meldung. Eine neue Veröffentlichung kann auch bei gleicher GUID und gleichem Link wieder erscheinen. Titel- oder Beschreibungsänderungen allein heben eine Erledigung weiterhin nicht auf.
+
 ## Kontext
 
 Eine Feed-Meldung kann bereits bearbeitet sein, obwohl Jellyfin die angekündigten Medien noch nicht kennt. Der Auftraggeber möchte einzelne Zeilen unter «Aktuell fehlend» mit einem Klick erledigen. Neue RSS-Einträge sollen unabhängig davon weiterhin angezeigt werden.

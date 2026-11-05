@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import http.client
+import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from html.parser import HTMLParser
 from urllib.parse import urlencode
 
@@ -14,7 +15,7 @@ from newtvshowsng2.models import Library, Series
 from newtvshowsng2.rendering import Renderer
 from newtvshowsng2.scanner import Scanner
 from newtvshowsng2.server import ApplicationServer
-from newtvshowsng2.storage import AnnouncementUnavailable, Storage
+from newtvshowsng2.storage import AnnouncementUnavailable, Storage, _source_key
 from test_scanner_and_rendering import Feeds, Jellyfin, release, release_views, setup
 
 
@@ -133,6 +134,228 @@ def test_new_feed_identity_is_independent_of_completed_entries(app, marker, guid
     assert current[0]["title"] == new.title
     assert current[0]["completed_at"] is None
     assert shown_keys(cfg) == [current[0]["source_key"]]
+
+
+@pytest.mark.parametrize("guid", ["post-1", None])
+@pytest.mark.parametrize("coverage", ["missing", "available", "played"])
+def test_republished_season_with_same_link_reopens_only_when_still_missing(
+    tmp_path, guid, coverage
+):
+    cfg, storage, renderer = setup(tmp_path)
+    series = Series("decker", "R.J. Decker")
+    library = Library([series], missing_episode_tracking_enabled=True)
+    library.add_episode(series.id, 2, 1)
+    jellyfin = Jellyfin(library, {(series.id, 2): {1, 2}})
+    first = replace(
+        release(), guid=guid, link="https://feed.test/r-j-decker-s02/",
+        title="R.J.Decker.S02.German.DL.1080p.WEB.h264-SAUERKRAUT", content="",
+    )
+    scanner = Scanner(cfg, storage, renderer, jellyfin, Feeds([first]))
+    assert scanner.run_feed()
+    old_keys = shown_keys(cfg)
+    scanner.complete_announcements(old_keys)
+    completed_at = storage.announcements()[0]["completed_at"]
+
+    if coverage == "available":
+        jellyfin.library.add_episode(series.id, 2, 2)
+    elif coverage == "played":
+        jellyfin.played[(series.id, 2)] = {2}
+    republished = replace(first, published_at=first.published_at + timedelta(days=7))
+    scanner.feeds.releases = [republished]
+    assert scanner.run_feed()
+    history = storage.announcements()
+    assert len(history) == 2
+    assert history[1]["source_key"] == old_keys[0]
+    assert history[1]["completed_at"] == completed_at
+    assert history[0]["completed_at"] is None
+    assert history[0]["link"] == history[1]["link"]
+    assert history[0]["guid"] == history[1]["guid"]
+    current = storage.announcements(current_only=True)
+    if coverage == "missing":
+        assert [row["source_key"] for row in current] == [history[0]["source_key"]]
+        assert shown_keys(cfg) == [history[0]["source_key"]]
+        # Ein vor der erneuten Veröffentlichung geöffnetes Formular darf nur
+        # seine ursprüngliche Meldung erledigen.
+        scanner.complete_announcements(old_keys)
+        assert storage.announcements(current_only=True) == current
+        scanner.complete_announcements(shown_keys(cfg))
+    else:
+        assert not current
+    assert scanner.run_feed()
+    assert len(storage.announcements()) == 2
+    assert not storage.announcements(current_only=True)
+
+
+@pytest.mark.parametrize("original_date_known", [True, False])
+@pytest.mark.parametrize("prune", [True, False])
+def test_missing_feed_date_does_not_reopen_a_completed_publication(
+    app, original_date_known, prune
+):
+    cfg, storage, scanner = app
+    if not original_date_known:
+        scanner.feeds.releases = [
+            replace(item, guid="undated-" + item.guid, published_at_known=False)
+            for item in scanner.feeds.releases
+        ]
+        assert scanner.run_feed()
+    scanner.complete_announcements(shown_keys(cfg))
+    before = {row["source_key"]: row["completed_at"] for row in storage.announcements()}
+    if prune:
+        storage.prune(0)
+    scanner.feeds.releases = [
+        replace(item, published_at_known=False, published_at=item.published_at + timedelta(days=1))
+        for item in scanner.feeds.releases
+    ]
+    assert scanner.run_feed()
+    assert not storage.announcements(current_only=True)
+    if not prune:
+        assert {row["source_key"]: row["completed_at"] for row in storage.announcements()} == before
+    assert scanner.run_feed()
+    assert not storage.announcements(current_only=True)
+
+
+def test_same_publication_in_another_timezone_keeps_its_completion(app):
+    cfg, storage, scanner = app
+    scanner.complete_announcements(shown_keys(cfg))
+    before = storage.announcements()
+    scanner.feeds.releases = [
+        replace(item, published_at=item.published_at.astimezone(timezone(timedelta(hours=1))))
+        for item in scanner.feeds.releases
+    ]
+    assert scanner.run_feed()
+    assert not storage.announcements(current_only=True)
+    assert [row["source_key"] for row in storage.announcements()] == [
+        row["source_key"] for row in before
+    ]
+    assert [row["completed_at"] for row in storage.announcements()] == [
+        row["completed_at"] for row in before
+    ]
+
+
+@pytest.mark.parametrize("reverse", [True, False])
+def test_replayed_older_publication_does_not_replace_or_complete_the_new_one(app, reverse):
+    cfg, storage, scanner = app
+    scanner.complete_announcements(shown_keys(cfg))
+    first, second = scanner.feeds.releases
+    newer = replace(first, published_at=first.published_at + timedelta(days=1))
+    publications = [first, newer]
+    scanner.feeds.releases = [*(reversed(publications) if reverse else publications), second]
+    assert scanner.run_feed()
+    assert len(storage.announcements()) == 3
+    current = storage.announcements(current_only=True)
+    assert len(current) == 1
+    assert current[0]["published_at"] == newer.published_at.isoformat()
+    assert current[0]["completed_at"] is None
+
+
+def test_republication_remains_independent_after_restart_and_history_pruning(app):
+    cfg, storage, scanner = app
+    scanner.complete_announcements(shown_keys(cfg))
+    first, second = scanner.feeds.releases
+    storage.prune(0)
+    reopened = Storage(cfg.database_path)
+    reopened.initialize()
+    newer = replace(first, published_at=first.published_at + timedelta(days=1))
+    restarted = Scanner(
+        cfg, reopened, Renderer(reopened, cfg.output_path, cfg.timezone),
+        scanner.jellyfin, Feeds([first, newer, second]),
+    )
+    assert restarted.run_feed()
+    current = reopened.announcements(current_only=True)
+    assert len(current) == 1
+    assert current[0]["published_at"] == newer.published_at.isoformat()
+    assert current[0]["completed_at"] is None
+
+
+def use_legacy_keys(storage):
+    rows = storage.announcements()
+    with sqlite3.connect(storage.path) as connection:
+        for row in rows:
+            old_key = _source_key(row["feed_item_key"], row["season"], row["episode"])
+            connection.execute(
+                "UPDATE announcements SET source_key = ? WHERE source_key = ?",
+                (old_key, row["source_key"]),
+            )
+            connection.execute(
+                "UPDATE announcement_completions SET source_key = ? WHERE source_key = ?",
+                (old_key, row["source_key"]),
+            )
+        connection.execute(
+            "DELETE FROM announcement_completions WHERE source_key NOT IN "
+            "(SELECT source_key FROM announcements)"
+        )
+
+
+@pytest.mark.parametrize("republish", [False, True])
+def test_legacy_completions_keep_their_original_publication(app, republish):
+    cfg, storage, scanner = app
+    scanner.complete_announcements(shown_keys(cfg))
+    completed = {row["guid"]: row["completed_at"] for row in storage.announcements()}
+    use_legacy_keys(storage)
+    if republish:
+        first, second = scanner.feeds.releases
+        scanner.feeds.releases = [
+            replace(first, published_at=first.published_at + timedelta(days=1)), second,
+        ]
+    assert scanner.run_feed()
+    assert len(storage.announcements()) == 2 + int(republish)
+    assert len(storage.announcements(current_only=True)) == int(republish)
+    assert {
+        row["guid"]: row["completed_at"]
+        for row in storage.announcements() if row["completed_at"] is not None
+    } == completed
+    assert scanner.run_feed()
+    assert len(storage.announcements()) == 2 + int(republish)
+
+
+def test_pruned_legacy_completion_does_not_hide_later_publications(app):
+    cfg, storage, scanner = app
+    scanner.complete_announcements(shown_keys(cfg))
+    completed_at = datetime.fromisoformat(storage.announcements()[0]["completed_at"])
+    use_legacy_keys(storage)
+    storage.prune(0)
+    assert scanner.run_feed()
+    assert not storage.announcements(current_only=True)
+    first, second = scanner.feeds.releases
+    scanner.feeds.releases = [
+        replace(first, published_at=completed_at + timedelta(days=1)), second,
+    ]
+    assert scanner.run_feed()
+    current = storage.announcements(current_only=True)
+    assert len(current) == 1
+    assert current[0]["guid"] == first.guid
+
+
+def test_conflicting_publication_migration_rolls_back_completions(app):
+    cfg, storage, scanner = app
+    scanner.complete_announcements(shown_keys(cfg))
+    use_legacy_keys(storage)
+    with sqlite3.connect(storage.path) as connection:
+        connection.row_factory = sqlite3.Row
+        row = dict(connection.execute("SELECT * FROM announcements LIMIT 1").fetchone())
+        row["source_key"] = _source_key(
+            row["feed_item_key"], row["season"], row["episode"],
+            datetime.fromisoformat(row["published_at"]),
+        )
+        connection.execute(
+            f"INSERT INTO announcements ({', '.join(row)}) "
+            f"VALUES ({', '.join('?' for _ in row)})",
+            tuple(row.values()),
+        )
+        before = connection.execute(
+            "SELECT * FROM announcement_completions ORDER BY source_key"
+        ).fetchall()
+    history = storage.announcements()
+    assert not scanner.run_feed()
+    assert storage.state()["scan_status"] == "error"
+    after = storage.announcements()
+    assert [{**row, "is_new": 0} for row in after] == [
+        {**row, "is_new": 0} for row in history
+    ]
+    with sqlite3.connect(storage.path) as connection:
+        assert connection.execute(
+            "SELECT * FROM announcement_completions ORDER BY source_key"
+        ).fetchall() == [tuple(row) for row in before]
 
 
 def test_history_pruning_preserves_completions_when_feed_entries_return(app):

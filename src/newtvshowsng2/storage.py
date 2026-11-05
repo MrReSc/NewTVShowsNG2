@@ -5,6 +5,7 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -222,15 +223,34 @@ class Storage:
         seen_at: datetime,
     ) -> None:
         feed_item_key = _feed_item_key(feed)
-        content_hash = hashlib.sha256(
-            f"{feed.title}\0{feed.link}\0{feed.published_at.isoformat()}\0{feed.content}".encode()
-        ).hexdigest()
-        source_keys = [
-            _source_key(feed_item_key, season, parsed.episode)
-            for season in parsed.seasons
-        ]
-
         with self._connect() as connection:
+            publication_at = feed.published_at if feed.published_at_known else None
+            if publication_at is not None:
+                self._migrate_publication_keys(connection, feed_item_key)
+            else:
+                previous = connection.execute(
+                    "SELECT source_key, season, episode, published_at FROM announcements "
+                    "WHERE feed_item_key = ? ORDER BY published_at DESC LIMIT 1",
+                    (feed_item_key,),
+                ).fetchone()
+                if previous is not None:
+                    # Ein fehlendes Feed-Datum darf weder die letzte Veröffentlichung
+                    # ersetzen noch aus der aktuellen Abrufzeit eine neue erzeugen.
+                    feed = replace(
+                        feed, published_at=datetime.fromisoformat(previous["published_at"])
+                    )
+                    if previous["source_key"] == _source_key(
+                        feed_item_key, previous["season"], previous["episode"],
+                        feed.published_at,
+                    ):
+                        publication_at = feed.published_at
+            content_hash = hashlib.sha256(
+                f"{feed.title}\0{feed.link}\0{_iso(feed.published_at)}\0{feed.content}".encode()
+            ).hexdigest()
+            source_keys = [
+                _source_key(feed_item_key, season, parsed.episode, publication_at)
+                for season in parsed.seasons
+            ]
             existing = {
                 str(row["source_key"]): str(row["content_hash"])
                 for row in connection.execute(
@@ -240,6 +260,35 @@ class Storage:
                 )
             }
             for season, source_key in zip(parsed.seasons, source_keys, strict=True):
+                if publication_at is None:
+                    connection.execute(
+                        "INSERT INTO announcement_completions (source_key, completed_at) "
+                        "SELECT ?, completed_at FROM announcement_completions "
+                        "WHERE source_key = ? ON CONFLICT(source_key) DO NOTHING",
+                        (source_key, _undated_completion_key(feed_item_key, season, parsed.episode)),
+                    )
+                else:
+                    # Bei bereits bereinigten Altmeldungen ist nur der Zeitpunkt
+                    # der Erledigung als Grenze für die Migration verfügbar.
+                    legacy = connection.execute(
+                        "SELECT completed_at FROM announcement_completions "
+                        "WHERE source_key = ?",
+                        (_source_key(feed_item_key, season, parsed.episode),),
+                    ).fetchone()
+                    if legacy is not None and publication_at <= datetime.fromisoformat(
+                        legacy["completed_at"]
+                    ):
+                        connection.execute(
+                            "INSERT INTO announcement_completions (source_key, completed_at) "
+                            "VALUES (?, ?) ON CONFLICT(source_key) DO NOTHING",
+                            (source_key, legacy["completed_at"]),
+                        )
+                        connection.execute(
+                            "INSERT INTO announcement_completions (source_key, completed_at) "
+                            "VALUES (?, ?) ON CONFLICT(source_key) DO NOTHING",
+                            (_undated_completion_key(feed_item_key, season, parsed.episode),
+                             legacy["completed_at"]),
+                        )
                 state = _library_state(
                     library, match.series.id, season, parsed.episode
                 )
@@ -314,8 +363,46 @@ class Storage:
             placeholders = ", ".join("?" for _ in source_keys)
             connection.execute(
                 f"DELETE FROM announcements WHERE feed_item_key = ? "
+                "AND published_at = ? "
                 f"AND source_key NOT IN ({placeholders})",
-                (feed_item_key, *source_keys),
+                (feed_item_key, _iso(feed.published_at), *source_keys),
+            )
+
+    @staticmethod
+    def _migrate_publication_keys(
+        connection: sqlite3.Connection, feed_item_key: str
+    ) -> None:
+        rows = connection.execute(
+            "SELECT source_key, season, episode, published_at FROM announcements "
+            "WHERE feed_item_key = ?",
+            (feed_item_key,),
+        ).fetchall()
+        for row in rows:
+            old_key = _source_key(feed_item_key, row["season"], row["episode"])
+            if row["source_key"] != old_key:
+                continue
+            new_key = _source_key(
+                feed_item_key, row["season"], row["episode"],
+                datetime.fromisoformat(row["published_at"]),
+            )
+            connection.execute(
+                "UPDATE announcements SET source_key = ? WHERE source_key = ?",
+                (new_key, old_key),
+            )
+            connection.execute(
+                "INSERT INTO announcement_completions (source_key, completed_at) "
+                "SELECT ?, completed_at FROM announcement_completions WHERE source_key = ? "
+                "ON CONFLICT(source_key) DO NOTHING",
+                (new_key, old_key),
+            )
+            connection.execute(
+                "INSERT INTO announcement_completions (source_key, completed_at) "
+                "SELECT ?, completed_at FROM announcement_completions WHERE source_key = ? "
+                "ON CONFLICT(source_key) DO NOTHING",
+                (_undated_completion_key(feed_item_key, row["season"], row["episode"]), old_key),
+            )
+            connection.execute(
+                "DELETE FROM announcement_completions WHERE source_key = ?", (old_key,)
             )
 
     def refresh_library_state(self, library: Library) -> None:
@@ -385,6 +472,19 @@ class Storage:
                 "INSERT INTO announcement_completions (source_key, completed_at) "
                 "VALUES (?, ?) ON CONFLICT(source_key) DO NOTHING",
                 ((key, _iso(completed_at)) for key in keys),
+            )
+            # Nach der Historienbereinigung darf ein fehlendes Feed-Datum
+            # keine neue Aufgabe aus einer bereits erledigten Meldung machen.
+            rows = connection.execute(
+                "SELECT feed_item_key, season, episode FROM announcements "
+                f"WHERE source_key IN ({placeholders})",
+                keys,
+            ).fetchall()
+            connection.executemany(
+                "INSERT INTO announcement_completions (source_key, completed_at) "
+                "VALUES (?, ?) ON CONFLICT(source_key) DO NOTHING",
+                ((_undated_completion_key(row["feed_item_key"], row["season"], row["episode"]),
+                  _iso(completed_at)) for row in rows),
             )
 
     def prune(self, max_history: int) -> None:
@@ -713,12 +813,19 @@ def _feed_item_key(feed: FeedRelease) -> str:
 
 
 def _source_key(
-    feed_item_key: str, season: int, episode: int | None
+    feed_item_key: str, season: int, episode: int | None,
+    publication_at: datetime | None = None,
 ) -> str:
     episode_key = "" if episode is None else str(episode)
-    return hashlib.sha256(
-        f"{feed_item_key}\0season:{season}\0episode:{episode_key}".encode()
-    ).hexdigest()
+    identity = f"{feed_item_key}\0season:{season}\0episode:{episode_key}"
+    if publication_at is not None:
+        identity += f"\0published:{_iso(publication_at)}"
+    return hashlib.sha256(identity.encode()).hexdigest()
+
+
+def _undated_completion_key(feed_item_key: str, season: int, episode: int | None) -> str:
+    identity = _source_key(feed_item_key, season, episode)
+    return hashlib.sha256(f"{identity}\0undated-completion".encode()).hexdigest()
 
 
 def _iso(value: datetime) -> str:
