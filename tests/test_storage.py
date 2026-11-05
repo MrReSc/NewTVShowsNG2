@@ -113,7 +113,27 @@ def test_initialize_migrates_existing_database_without_data_loss(tmp_path) -> No
         }
         assert {
             row[1] for row in connection.execute("PRAGMA table_info(announcement_completions)")
-        } == {"source_key", "completed_at"}
+        } == {"source_key", "completed_at", "reopened_at"}
+
+
+def test_initialize_preserves_existing_two_column_completions(tmp_path):
+    path = tmp_path / "legacy-completions.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "CREATE TABLE announcement_completions "
+            "(source_key TEXT PRIMARY KEY, completed_at TEXT NOT NULL)"
+        )
+        connection.execute(
+            "INSERT INTO announcement_completions VALUES (?, ?)",
+            ("existing-key", "2026-11-01T10:00:00+00:00"),
+        )
+    storage = Storage(path)
+    storage.initialize()
+    storage.initialize()
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT * FROM announcement_completions").fetchall() == [
+            ("existing-key", "2026-11-01T10:00:00+00:00", None)
+        ]
 
 
 def test_initialize_expands_legacy_season_range_idempotently(tmp_path) -> None:

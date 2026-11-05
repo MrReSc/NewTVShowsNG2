@@ -13,6 +13,7 @@ Die Architecture Decision Records (ADR) halten die verbindlichen Architekturents
 | [0007](0007-eine-anwendungsinstanz-ohne-dateisperre.md) | Eine Anwendungsinstanz ohne Dateisperre | Angenommen |
 | [0008](0008-feed-eintraege-manuell-erledigen.md) | Feed-Einträge manuell erledigen | Angenommen |
 | [0009](0009-feed-veroeffentlichungen-unterscheiden.md) | Erneute Feed-Veröffentlichungen bei gleicher GUID unterscheiden | Angenommen |
+| [0010](0010-erledigte-feed-eintraege-wieder-oeffnen.md) | Erledigte Feed-Einträge wieder öffnen | Angenommen |
 
 Der Status «Angenommen» beschreibt die verbindliche Entscheidung. Er bestätigt nicht, dass die bestehende Implementierung sie bereits vollständig erfüllt. Bekannte Abweichungen sind in den betroffenen ADRs beschrieben. Diese Dokumentation allein migriert keine Daten und ändert kein Laufzeitverhalten.
 

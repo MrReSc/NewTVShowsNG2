@@ -341,6 +341,11 @@
                           {% endfor %}
                           <button type="submit" aria-label="{{ row.display_title }} als erledigt markieren">Erledigt</button>
                         </form>
+                      {% elif row.completed_at %}
+                        <form class="complete-action" method="post" action="/announcements/reopen">
+                          <input type="hidden" name="source_key" value="{{ row.source_key }}">
+                          <button type="submit" aria-label="{{ row.matched_series_name }} Staffel {{ row.season }}{% if row.episode is not none %} Episode {{ row.episode }}{% endif %} wieder öffnen">Wieder öffnen</button>
+                        </form>
                       {% endif %}
                     </td>
                     <td class="date-col" data-label="Datum">{{ row.published_at | local_datetime }}</td>

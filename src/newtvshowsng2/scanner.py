@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
@@ -10,10 +11,10 @@ from .feeds import FeedClient, FeedError
 from .jellyfin import JellyfinClient, JellyfinError
 from .matching import match_release
 from .media_importer import ImportRunResult, MediaImporter, SelectedSeries
-from .models import Library, SeasonInventory
+from .models import Library, Match, SeasonInventory
 from .parsing import parse_release
 from .rendering import Renderer
-from .storage import Storage
+from .storage import AnnouncementUnavailable, Storage
 
 LOGGER = logging.getLogger(__name__)
 ManualRun = Literal["feed", "import"]
@@ -85,6 +86,43 @@ class Scanner:
     def complete_announcements(self, source_keys: list[str]) -> None:
         with self._lock:
             self.storage.complete_announcements(source_keys, datetime.now(UTC))
+            self.renderer.render()
+
+    def reopen_announcements(self, source_keys: list[str]) -> None:
+        with self._lock:
+            rows = self.storage.reopen_candidates(source_keys)
+            library = self.jellyfin.load_library()
+            matches: dict[str, Match] = {}
+            inventories: dict[str, dict[int, SeasonInventory]] = {}
+            for row in rows:
+                parsed = parse_release(row["title"])
+                if (
+                    parsed is None or row["season"] not in parsed.seasons
+                    or row["episode"] != parsed.episode
+                ):
+                    raise AnnouncementUnavailable("Feed-Eintrag besitzt keine eindeutigen Episodenangaben")
+                # Die gespeicherten Zuordnungen können inzwischen veraltet sein.
+                # Nur die ursprünglichen Feed-Angaben dienen erneut als Suchkriterien.
+                parsed = replace(parsed, imdb_id=row["imdb_id"])
+                match = match_release(parsed, library.series)
+                if match is None or match.warning:
+                    raise AnnouncementUnavailable("Serie wurde in Jellyfin nicht eindeutig gefunden")
+                matches[row["source_key"]] = match
+                if match.series.id not in inventories:
+                    inventories[match.series.id] = self.jellyfin.load_series_episodes(match.series.id)
+                inventory = inventories[match.series.id].get(row["season"], SeasonInventory())
+                if not inventory.played_status_complete:
+                    raise JellyfinError("Jellyfin-Gesehen-Status ist unvollständig")
+                available = library.episode_numbers(match.series.id, row["season"])
+                if not available.issubset(inventory.episodes):
+                    raise JellyfinError("Jellyfin lieferte widersprüchliche Episodendaten")
+                library.set_played_episodes(
+                    match.series.id, row["season"], inventory.played,
+                    complete=bool(inventory.episodes),
+                )
+                if library.missing_episode_tracking_enabled:
+                    library.set_expected_episodes(match.series.id, row["season"], inventory.episodes)
+            self.storage.reopen_announcements(matches, library, datetime.now(UTC))
             self.renderer.render()
 
     def scan_income(self) -> bool | None:

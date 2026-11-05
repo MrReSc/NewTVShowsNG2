@@ -46,7 +46,8 @@ CREATE INDEX IF NOT EXISTS announcements_published
     ON announcements(published_at DESC);
 CREATE TABLE IF NOT EXISTS announcement_completions (
     source_key TEXT PRIMARY KEY,
-    completed_at TEXT NOT NULL
+    completed_at TEXT NOT NULL,
+    reopened_at TEXT
 );
 CREATE TABLE IF NOT EXISTS app_state (
     key TEXT PRIMARY KEY,
@@ -114,6 +115,7 @@ class Storage:
                 "CREATE INDEX IF NOT EXISTS announcements_feed_item "
                 "ON announcements(feed_item_key)"
             )
+            self._ensure_column(connection, "announcement_completions", "reopened_at", "TEXT")
 
     def begin_scan(
         self, started_at: datetime, next_run_at: datetime | None, *, manual: bool = False
@@ -261,18 +263,16 @@ class Storage:
             }
             for season, source_key in zip(parsed.seasons, source_keys, strict=True):
                 if publication_at is None:
-                    connection.execute(
-                        "INSERT INTO announcement_completions (source_key, completed_at) "
-                        "SELECT ?, completed_at FROM announcement_completions "
-                        "WHERE source_key = ? ON CONFLICT(source_key) DO NOTHING",
-                        (source_key, _undated_completion_key(feed_item_key, season, parsed.episode)),
+                    _inherit_completion(
+                        connection, _undated_completion_key(feed_item_key, season, parsed.episode),
+                        source_key,
                     )
                 else:
                     # Bei bereits bereinigten Altmeldungen ist nur der Zeitpunkt
                     # der Erledigung als Grenze für die Migration verfügbar.
                     legacy = connection.execute(
                         "SELECT completed_at FROM announcement_completions "
-                        "WHERE source_key = ?",
+                        "WHERE source_key = ? AND reopened_at IS NULL",
                         (_source_key(feed_item_key, season, parsed.episode),),
                     ).fetchone()
                     if legacy is not None and publication_at <= datetime.fromisoformat(
@@ -390,16 +390,15 @@ class Storage:
                 (new_key, old_key),
             )
             connection.execute(
-                "INSERT INTO announcement_completions (source_key, completed_at) "
-                "SELECT ?, completed_at FROM announcement_completions WHERE source_key = ? "
+                "INSERT INTO announcement_completions (source_key, completed_at, reopened_at) "
+                "SELECT ?, completed_at, reopened_at FROM announcement_completions "
+                "WHERE source_key = ? "
                 "ON CONFLICT(source_key) DO NOTHING",
                 (new_key, old_key),
             )
-            connection.execute(
-                "INSERT INTO announcement_completions (source_key, completed_at) "
-                "SELECT ?, completed_at FROM announcement_completions WHERE source_key = ? "
-                "ON CONFLICT(source_key) DO NOTHING",
-                (_undated_completion_key(feed_item_key, row["season"], row["episode"]), old_key),
+            _inherit_completion(
+                connection, old_key,
+                _undated_completion_key(feed_item_key, row["season"], row["episode"]),
             )
             connection.execute(
                 "DELETE FROM announcement_completions WHERE source_key = ?", (old_key,)
@@ -470,7 +469,9 @@ class Storage:
             # gelesene Feed-Einträge nicht wieder als offene Aufgabe erscheinen.
             connection.executemany(
                 "INSERT INTO announcement_completions (source_key, completed_at) "
-                "VALUES (?, ?) ON CONFLICT(source_key) DO NOTHING",
+                "VALUES (?, ?) ON CONFLICT(source_key) DO UPDATE SET "
+                "completed_at = excluded.completed_at, reopened_at = NULL "
+                "WHERE announcement_completions.reopened_at IS NOT NULL",
                 ((key, _iso(completed_at)) for key in keys),
             )
             # Nach der Historienbereinigung darf ein fehlendes Feed-Datum
@@ -482,10 +483,71 @@ class Storage:
             ).fetchall()
             connection.executemany(
                 "INSERT INTO announcement_completions (source_key, completed_at) "
-                "VALUES (?, ?) ON CONFLICT(source_key) DO NOTHING",
+                "VALUES (?, ?) ON CONFLICT(source_key) DO UPDATE SET "
+                "completed_at = excluded.completed_at, reopened_at = NULL "
+                "WHERE announcement_completions.reopened_at IS NOT NULL",
                 ((_undated_completion_key(row["feed_item_key"], row["season"], row["episode"]),
                   _iso(completed_at)) for row in rows),
             )
+
+    def reopen_candidates(self, source_keys: list[str]) -> list[dict[str, Any]]:
+        keys = tuple(dict.fromkeys(source_keys))
+        if not keys:
+            raise ValueError("Feed-Einträge fehlen")
+        placeholders = ", ".join("?" for _ in keys)
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT source_key, title, imdb_id, season, episode FROM announcements "
+                f"WHERE source_key IN ({placeholders})",
+                keys,
+            ).fetchall()
+        if {row["source_key"] for row in rows} != set(keys):
+            raise AnnouncementUnavailable("Feed-Eintrag ist nicht mehr in der Historie verfügbar")
+        return [dict(row) for row in rows]
+
+    def reopen_announcements(
+        self, matches: dict[str, Match], library: Library, reopened_at: datetime
+    ) -> None:
+        if not matches:
+            raise ValueError("Feed-Einträge fehlen")
+        placeholders = ", ".join("?" for _ in matches)
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute(
+                "SELECT source_key, feed_item_key, season, episode FROM announcements "
+                f"WHERE source_key IN ({placeholders})",
+                tuple(matches),
+            ).fetchall()
+            if {row["source_key"] for row in rows} != set(matches):
+                raise AnnouncementUnavailable("Feed-Eintrag ist nicht mehr in der Historie verfügbar")
+            for row in rows:
+                match = matches[row["source_key"]]
+                state = _library_state(library, match.series.id, row["season"], row["episode"])
+                connection.execute(
+                    """
+                    UPDATE announcements SET
+                        matched_series_id = ?, matched_series_name = ?,
+                        match_method = ?, match_warning = ?,
+                        jellyfin_episode = ?, jellyfin_episode_count = ?,
+                        jellyfin_expected_episode_count = ?, is_current = ?,
+                        jellyfin_played_episode_count = ?, needed_episodes = ?,
+                        status_reason = ?, is_new = 0
+                    WHERE source_key = ?
+                    """,
+                    (match.series.id, match.series.name, match.method, int(match.warning),
+                     *state, row["source_key"]),
+                )
+                # Der erhaltene Datensatz verhindert, dass frühere Markierungen
+                # ohne Datum die aufgehobene Erledigung erneut übernehmen.
+                connection.execute(
+                    "UPDATE announcement_completions SET reopened_at = ? "
+                    "WHERE source_key = ? AND reopened_at IS NULL",
+                    (_iso(reopened_at), row["source_key"]),
+                )
+                _inherit_completion(
+                    connection, row["source_key"],
+                    _undated_completion_key(row["feed_item_key"], row["season"], row["episode"]),
+                )
 
     def prune(self, max_history: int) -> None:
         with self._connect() as connection:
@@ -500,7 +562,8 @@ class Storage:
                 DELETE FROM announcements WHERE source_key IN (
                     SELECT a.source_key FROM announcements AS a
                     LEFT JOIN announcement_completions AS c USING (source_key)
-                    ORDER BY (a.is_current = 1 AND c.completed_at IS NULL) ASC,
+                    ORDER BY (a.is_current = 1 AND
+                        (c.completed_at IS NULL OR c.reopened_at IS NOT NULL)) ASC,
                         a.published_at ASC, a.first_seen_at ASC
                     LIMIT ?
                 )
@@ -510,11 +573,15 @@ class Storage:
 
     def announcements(self, current_only: bool = False) -> list[dict[str, Any]]:
         query = (
-            "SELECT a.*, c.completed_at FROM announcements AS a "
+            "SELECT a.*, CASE WHEN c.reopened_at IS NULL THEN c.completed_at END "
+            "AS completed_at FROM announcements AS a "
             "LEFT JOIN announcement_completions AS c USING (source_key)"
         )
         if current_only:
-            query += " WHERE a.is_current = 1 AND c.completed_at IS NULL"
+            query += (
+                " WHERE a.is_current = 1 "
+                "AND (c.completed_at IS NULL OR c.reopened_at IS NOT NULL)"
+            )
         query += " ORDER BY a.published_at DESC, a.first_seen_at DESC"
         with self._connect() as connection:
             rows = [dict(row) for row in connection.execute(query).fetchall()]
@@ -805,6 +872,23 @@ class Storage:
         }
         if column not in columns:
             connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _inherit_completion(
+    connection: sqlite3.Connection, source_key: str, target_key: str
+) -> None:
+    # Eine datumlose Kennung kann mehrere Veröffentlichungen vertreten. Eine
+    # ältere Aufhebung darf eine jüngere ausdrückliche Erledigung nicht verdrängen.
+    connection.execute(
+        "INSERT INTO announcement_completions (source_key, completed_at, reopened_at) "
+        "SELECT ?, completed_at, reopened_at FROM announcement_completions "
+        "WHERE source_key = ? ON CONFLICT(source_key) DO UPDATE SET "
+        "reopened_at = excluded.reopened_at "
+        "WHERE excluded.reopened_at IS NOT NULL "
+        "AND announcement_completions.reopened_at IS NULL "
+        "AND excluded.reopened_at >= announcement_completions.completed_at",
+        (target_key, source_key),
+    )
 
 
 def _feed_item_key(feed: FeedRelease) -> str:

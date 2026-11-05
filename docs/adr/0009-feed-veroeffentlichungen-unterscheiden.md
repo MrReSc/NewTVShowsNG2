@@ -4,6 +4,8 @@ Datum: 2026-11-05
 
 Status: Angenommen
 
+Ergänzung vom 5. November 2026: [ADR 0010](0010-erledigte-feed-eintraege-wieder-oeffnen.md) ergänzt die Erledigt-Markierungen um den Zeitpunkt eines manuellen Wiederöffnens. Eine aufgehobene Erledigung wird beim erneuten Einlesen derselben Veröffentlichung nicht wieder wirksam.
+
 ## Kontext
 
 Bei einer weiteren Episode kann der Anbieter denselben Serienlink erneut im Feed veröffentlichen. Der Auftraggeber hat festgelegt, dass eine neue GUID oder ein neuer Veröffentlichungszeitpunkt als neue Meldung zählt. Ein unveränderter Link darf dies nicht verhindern. Ein GUID-Wechsel bei jeder weiteren Episode ist nicht nachgewiesen.

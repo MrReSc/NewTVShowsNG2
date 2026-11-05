@@ -20,15 +20,16 @@ from test_scanner_and_rendering import Feeds, Jellyfin, release, release_views, 
 
 
 class CompletionForms(HTMLParser):
-    def __init__(self, html):
+    def __init__(self, html, action="/announcements/complete"):
         super().__init__()
+        self.action = action
         self.groups = []
         self.current = None
         self.feed(html)
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
-        if tag == "form" and attrs.get("action") == "/announcements/complete":
+        if tag == "form" and attrs.get("action") == self.action:
             assert attrs.get("method") == "post"
             self.current = []
             self.groups.append(self.current)
@@ -447,12 +448,12 @@ def http_app(app, tmp_path):
     thread.start()
     origin = f"http://127.0.0.1:{server.server_address[1]}"
 
-    def request(body, headers=None, method="POST"):
+    def request(body, headers=None, method="POST", path="/announcements/complete"):
         request_headers = {"Content-Type": "application/x-www-form-urlencoded"}
         request_headers.update({"Origin": origin} if headers is None else headers)
         connection = http.client.HTTPConnection(*server.server_address, timeout=3)
         try:
-            connection.request(method, "/announcements/complete", body, request_headers)
+            connection.request(method, path, body, request_headers)
             response = connection.getresponse()
             return response.status, response.getheader("Location"), response.read().decode("utf-8")
         finally:

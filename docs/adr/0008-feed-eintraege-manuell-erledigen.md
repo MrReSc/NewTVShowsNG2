@@ -6,6 +6,8 @@ Status: Angenommen
 
 Präzisierung vom 5. November 2026: [ADR 0009](0009-feed-veroeffentlichungen-unterscheiden.md) ersetzt die nachfolgende Regel zur Kennung einer Meldung. Eine neue Veröffentlichung kann auch bei gleicher GUID und gleichem Link wieder erscheinen. Titel- oder Beschreibungsänderungen allein heben eine Erledigung weiterhin nicht auf.
 
+Ergänzung vom 5. November 2026: [ADR 0010](0010-erledigte-feed-eintraege-wieder-oeffnen.md) erlaubt das manuelle Wiederöffnen einer erledigten Meldung in der Historie. Die Erledigung bleibt bis zu einer solchen ausdrücklichen Aktion bestehen.
+
 ## Kontext
 
 Eine Feed-Meldung kann bereits bearbeitet sein, obwohl Jellyfin die angekündigten Medien noch nicht kennt. Der Auftraggeber möchte einzelne Zeilen unter «Aktuell fehlend» mit einem Klick erledigen. Neue RSS-Einträge sollen unabhängig davon weiterhin angezeigt werden.

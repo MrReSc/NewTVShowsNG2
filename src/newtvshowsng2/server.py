@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
+from .jellyfin import JellyfinError
 from .media_importer import SelectionUnavailable
 from .rendering import LogRenderer
 from .scanner import Scanner
@@ -42,7 +43,7 @@ class RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if self.path not in (
             "/run/feed", "/run/import", "/run/income-scan", "/run/import/resolve",
-            "/announcements/complete",
+            "/announcements/complete", "/announcements/reopen",
         ):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
@@ -59,8 +60,8 @@ class RequestHandler(BaseHTTPRequestHandler):
         if not self._same_origin_request():
             self.send_error(HTTPStatus.FORBIDDEN, "Fremder Ursprung ist nicht erlaubt")
             return
-        if self.path == "/announcements/complete":
-            self._complete_announcements()
+        if self.path in ("/announcements/complete", "/announcements/reopen"):
+            self._set_announcement_completion(reopen=self.path == "/announcements/reopen")
             return
         if self.path == "/run/import/resolve":
             self._start_selected_import()
@@ -86,12 +87,13 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    def _complete_announcements(self) -> None:
+    def _set_announcement_completion(self, *, reopen: bool) -> None:
+        invalid_form = "Ungültiges Formular für Feed-Einträge"
         try:
             length = int(self.headers.get("Content-Length", "0"))
             content_type = self.headers.get("Content-Type", "").split(";", 1)[0]
             if not 1 <= length <= 65536 or content_type != "application/x-www-form-urlencoded":
-                raise ValueError("Ungültiges Erledigt-Formular")
+                raise ValueError(invalid_form)
             fields = parse_qs(
                 self.rfile.read(length).decode("utf-8"),
                 keep_blank_values=True,
@@ -101,21 +103,27 @@ class RequestHandler(BaseHTTPRequestHandler):
             if set(fields) != {"source_key"} or any(
                 len(key) != 64 for key in fields["source_key"]
             ):
-                raise ValueError("Ungültiges Erledigt-Formular")
+                raise ValueError(invalid_form)
         except (UnicodeError, ValueError):
-            self.send_error(HTTPStatus.BAD_REQUEST, "Ungültiges Erledigt-Formular")
+            self.send_error(HTTPStatus.BAD_REQUEST, invalid_form)
             return
         try:
-            self.server.scanner.complete_announcements(fields["source_key"])
+            if reopen:
+                self.server.scanner.reopen_announcements(fields["source_key"])
+            else:
+                self.server.scanner.complete_announcements(fields["source_key"])
         except AnnouncementUnavailable as exc:
             self.send_error(HTTPStatus.CONFLICT, str(exc))
             return
+        except JellyfinError as exc:
+            self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, str(exc))
+            return
         except Exception:
-            LOGGER.exception("Feed-Einträge konnten nicht als erledigt markiert werden")
-            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Erledigt-Markierung fehlgeschlagen")
+            LOGGER.exception("Erledigt-Status der Feed-Einträge konnte nicht geändert werden")
+            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Änderung des Erledigt-Status fehlgeschlagen")
             return
         self.send_response(HTTPStatus.SEE_OTHER)
-        self.send_header("Location", "/#overview")
+        self.send_header("Location", "/#history" if reopen else "/#overview")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", "0")
         self.end_headers()
