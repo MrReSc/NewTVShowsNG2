@@ -104,7 +104,7 @@ def test_season_release_is_current_until_all_expected_episodes_exist(tmp_path) -
     jellyfin = Jellyfin(library, {(series.id, 3): set(range(1, 11))})
     scanner = Scanner(cfg, storage, renderer, jellyfin, Feeds([release()]))
 
-    assert scanner.run()
+    assert scanner.run_feed()
     row = storage.announcements()[0]
     assert row["is_current"] == 1
     assert row["jellyfin_episode_count"] == 7
@@ -116,7 +116,7 @@ def test_season_release_is_current_until_all_expected_episodes_exist(tmp_path) -
         complete_library.add_episode(series.id, 3, episode)
     scanner.jellyfin = Jellyfin(complete_library, {(series.id, 3): set(range(1, 11))})
     scanner.feeds = Feeds([])
-    assert scanner.run()
+    assert scanner.run_feed()
     row = storage.announcements()[0]
     assert row["is_current"] == 0
     assert row["jellyfin_episode_count"] == 10
@@ -138,11 +138,11 @@ def test_concrete_episode_resolves_only_when_exact_episode_exists(tmp_path) -> N
         Feeds([release("The.Walking.Dead.Dead.City.S03E07.German")]),
     )
 
-    assert scanner.run()
+    assert scanner.run_feed()
     assert storage.announcements()[0]["is_current"] == 1
 
     library.add_episode(series.id, 3, 7)
-    assert scanner.run()
+    assert scanner.run_feed()
     assert storage.announcements()[0]["is_current"] == 0
 
 
@@ -165,7 +165,7 @@ def test_season_range_creates_independent_entries_and_statuses(tmp_path) -> None
     jellyfin = Jellyfin(library, expected, played=played)
     scanner = Scanner(cfg, storage, renderer, jellyfin, Feeds([ranged]))
 
-    assert scanner.run()
+    assert scanner.run_feed()
     rows = {row["season"]: row for row in storage.announcements()}
     assert set(rows) == {3, 4, 5, 6}
     assert {row["feed_item_key"] for row in rows.values()} == {
@@ -209,15 +209,15 @@ def test_changed_season_range_removes_obsolete_derived_entries(tmp_path) -> None
         Feeds([release("The.Walking.Dead.Dead.City.S03-S06.Complete.German")]),
     )
 
-    assert scanner.run()
+    assert scanner.run_feed()
     assert {row["season"] for row in storage.announcements()} == {3, 4, 5, 6}
-    assert scanner.run()
+    assert scanner.run_feed()
     assert len(storage.announcements()) == 4
 
     scanner.feeds = Feeds(
         [release("The.Walking.Dead.Dead.City.S03-S05.Complete.German")]
     )
-    assert scanner.run()
+    assert scanner.run_feed()
     assert {row["season"] for row in storage.announcements()} == {3, 4, 5}
 
 
@@ -244,7 +244,7 @@ def test_range_quality_variants_are_grouped_once_per_season(tmp_path) -> None:
         Feeds([first, second]),
     )
 
-    assert scanner.run()
+    assert scanner.run_feed()
     assert len(storage.announcements()) == 4
     html = cfg.output_path.read_text(encoding="utf-8")
     current_html, _ = release_views(html)
@@ -264,7 +264,7 @@ def test_unknown_season_inventory_stays_current(tmp_path) -> None:
     jellyfin = Jellyfin(library)
     scanner = Scanner(cfg, storage, renderer, jellyfin, Feeds([release()]))
 
-    assert scanner.run()
+    assert scanner.run_feed()
     row = storage.announcements()[0]
     assert row["is_current"] == 1
     assert row["jellyfin_episode_count"] == 10
@@ -286,7 +286,7 @@ def test_season_api_error_stays_current(tmp_path) -> None:
         Feeds([release("The.Walking.Dead.Dead.City.S03.COMPLETED.German")]),
     )
 
-    assert scanner.run()
+    assert scanner.run_feed()
     row = storage.announcements()[0]
     assert row["is_current"] == 1
     assert row["jellyfin_expected_episode_count"] is None
@@ -306,7 +306,7 @@ def test_contradictory_season_inventory_stays_unknown(tmp_path) -> None:
         Feeds([release()]),
     )
 
-    assert scanner.run()
+    assert scanner.run_feed()
     row = storage.announcements()[0]
     assert row["is_current"] == 1
     assert row["jellyfin_expected_episode_count"] is None
@@ -331,7 +331,7 @@ def test_release_variants_stay_stored_but_are_grouped_in_current_view(
     )
     scanner = Scanner(cfg, storage, renderer, jellyfin, Feeds([first, second]))
 
-    assert scanner.run()
+    assert scanner.run_feed()
     assert len(storage.announcements()) == 2
     assert jellyfin.series_calls == [series.id]
     html = cfg.output_path.read_text(encoding="utf-8")
@@ -367,7 +367,7 @@ def test_open_imports_and_transfers_render_in_separate_views_with_timeline(tmp_p
         ),
         Feeds([release()]),
     )
-    assert scanner.run()
+    assert scanner.run_feed()
 
     published = release().published_at
     for source, transferred_at in (
@@ -558,7 +558,7 @@ def test_html_is_escaped_and_keeps_reduced_columns(tmp_path) -> None:
         Feeds([unsafe]),
     )
 
-    assert scanner.run()
+    assert scanner.run_feed()
     html = cfg.output_path.read_text(encoding="utf-8")
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert "<script>alert(1)</script>" not in html

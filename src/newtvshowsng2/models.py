@@ -119,12 +119,6 @@ class Library:
         expected = self.expected_episodes.get((series_id, season))
         return available, len(expected) if expected is not None else None
 
-    def season_is_complete(self, series_id: str, season: int) -> bool | None:
-        expected = self.expected_episodes.get((series_id, season))
-        if expected is None:
-            return None
-        return expected.issubset(self.episode_numbers(series_id, season))
-
     def episode_in_season(self, series_id: str, season: int) -> int | None:
         value = self.highest_episode.get((series_id, season))
         return value if value is not None and value >= 0 else None

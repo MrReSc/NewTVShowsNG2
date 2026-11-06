@@ -387,7 +387,7 @@ def test_second_distinct_selection_waits_for_first_import(tmp_path) -> None:
     def track_second_start(source_path, signature, choice_key):
         if source_path == second_source.name:
             second_start_attempted.set()
-        return start_selected_import(source_path, signature, choice_key)
+        start_selected_import(source_path, signature, choice_key)
 
     scanner.start_selected_import = track_second_start
     server = ApplicationServer(

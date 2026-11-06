@@ -72,7 +72,7 @@ def test_manual_run_modes_are_separate_and_keep_automatic_schedule(tmp_path) -> 
     assert "Manuelles Einsortieren abgeschlossen" not in cfg.output_path.read_text()
 
 
-def test_automatic_run_waits_for_manual_run_and_uses_stability_window(tmp_path) -> None:
+def test_scheduled_import_waits_for_manual_feed_and_uses_stability_window(tmp_path) -> None:
     cfg, storage, renderer = setup(tmp_path)
     cfg = replace(cfg, media_import_enabled=True)
     entered = Event()
@@ -92,7 +92,7 @@ def test_automatic_run_waits_for_manual_run_and_uses_stability_window(tmp_path) 
     assert scanner.start_manual("feed")
     assert entered.wait(timeout=3)
     assert not scanner.start_manual("import")
-    scheduled = Thread(target=scanner.run)
+    scheduled = Thread(target=scanner.run_scheduled_import)
     scheduled.start()
     assert scheduled.is_alive()
     assert importer.calls == []
@@ -100,7 +100,7 @@ def test_automatic_run_waits_for_manual_run_and_uses_stability_window(tmp_path) 
     release.set()
     scheduled.join(timeout=3)
     assert not scheduled.is_alive()
-    assert feeds.calls == 2
+    assert feeds.calls == 1
     assert importer.calls == [False]
 
 

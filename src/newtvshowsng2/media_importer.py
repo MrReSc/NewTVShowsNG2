@@ -229,7 +229,7 @@ class MediaImporter:
         transferred = blocked = waiting = 0
         warnings: list[str] = []
         seen_paths: set[str] = set()
-        new_series: dict[tuple[str, int | None, str | None], tuple[Path, str]] = {}
+        new_series: dict[tuple[str, int | None, str | None], Path] = {}
         new_series_paths: set[Path] = set()
         units = sorted(self.config.income_dir.iterdir(), key=lambda item: item.name.casefold())
         if selection is not None:
@@ -300,7 +300,7 @@ class MediaImporter:
                 continue
 
             try:
-                target_series, display_name, jellyfin_series = self._resolve_series(
+                target_series, jellyfin_series = self._resolve_series(
                     parsed, library, new_series, new_series_paths,
                     selected_remote=selection.remote if selection is not None else None,
                     selected_series_id=(
@@ -317,9 +317,7 @@ class MediaImporter:
                     library,
                     jellyfin_series,
                 )
-                target, transfer_warning = self._transfer(
-                    unit, target_series, season_path
-                )
+                self._transfer(unit, target_series, season_path)
             except ImportWaiting as exc:
                 self.storage.update_media_import(
                     relative, "waiting", str(exc), parsed_title=parsed.series_title,
@@ -357,8 +355,6 @@ class MediaImporter:
                 blocked += 1
                 continue
 
-            if transfer_warning:
-                warnings.append(f"{relative}: {transfer_warning}")
             transferred += 1
 
         if selection is None:
@@ -496,12 +492,12 @@ class MediaImporter:
         self,
         parsed: ParsedRelease,
         library: Library,
-        new_series: dict[tuple[str, int | None, str | None], tuple[Path, str]],
+        new_series: dict[tuple[str, int | None, str | None], Path],
         new_series_paths: set[Path],
         *,
         selected_remote: RemoteSeries | None = None,
         selected_series_id: str | None = None,
-    ) -> tuple[Path, str, Series | None]:
+    ) -> tuple[Path, Series | None]:
         if selected_series_id is not None:
             series = next(
                 (item for item in library.series if item.id == selected_series_id), None
@@ -518,7 +514,7 @@ class MediaImporter:
                 )
             if parsed.year is not None and parsed.year != series.production_year:
                 raise ImportBlocked("Jellyfin-Serienjahr widerspricht dem Release-Jahr")
-            return self._existing_series_path(series), series.name, series
+            return self._existing_series_path(series), series
 
         match = match_release(parsed, library.series)
         if match is not None:
@@ -532,14 +528,12 @@ class MediaImporter:
                 raise ImportBlocked("Jellyfin-Serie widerspricht der gewählten Provider-ID")
             return (
                 self._existing_series_path(match.series),
-                match.series.name,
                 match.series,
             )
 
         identity = (parsed.normalized_title, parsed.year, parsed.imdb_id)
         if identity in new_series:
-            target, display_name = new_series[identity]
-            return target, display_name, None
+            return new_series[identity], None
 
         candidates = None
         if selected_remote is None:
@@ -574,7 +568,7 @@ class MediaImporter:
             )
         if provider_matches:
             series = provider_matches[0]
-            return self._existing_series_path(series), series.name, series
+            return self._existing_series_path(series), series
 
         folder_name = _series_folder_name(remote)
         target = _safe_child(self.config.shows_dir, folder_name)
@@ -591,10 +585,9 @@ class MediaImporter:
                 "Möglicherweise vorhandener Serienordner ist Jellyfin nicht eindeutig "
                 f"zugeordnet: {possible_existing.name}"
             )
-        result = (target, remote.name)
-        new_series[identity] = result
+        new_series[identity] = target
         new_series_paths.add(target)
-        return target, remote.name, None
+        return target, None
 
     def _pending_jellyfin_folder(self, parsed: ParsedRelease) -> Path | None:
         for child in self.config.shows_dir.iterdir():
@@ -807,7 +800,7 @@ class MediaImporter:
 
     def _transfer(
         self, unit: SourceUnit, series_path: Path, season_path: Path
-    ) -> tuple[Path, str | None]:
+    ) -> None:
         target = _contained_path(self.config.shows_dir, season_path / unit.path.name)
         source_relative = unit.path.relative_to(self.config.income_dir).as_posix()
         _recover_incomplete_target(target)
@@ -870,7 +863,6 @@ class MediaImporter:
                     raise
         except filesystem.FilesystemBlocked as exc:
             raise ImportBlocked(str(exc)) from exc
-        return target, None
 
     def recover_moves(self) -> set[str]:
         pending = self.storage.pending_media_moves()
@@ -983,7 +975,7 @@ def _signature(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _ensure_directory(path: Path) -> bool:
+def _ensure_directory(path: Path) -> None:
     if path.is_symlink():
         raise ImportBlocked(f"Zielverzeichnis ist ein symbolischer Link: {path.name}")
     try:
@@ -991,8 +983,6 @@ def _ensure_directory(path: Path) -> bool:
     except FileExistsError:
         if path.is_symlink() or not path.is_dir():
             raise ImportBlocked(f"Zielpfad ist kein sicheres Verzeichnis: {path.name}")
-        return False
-    return True
 
 
 def _recover_incomplete_target(target: Path) -> None:

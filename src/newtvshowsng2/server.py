@@ -151,16 +151,13 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
             return
         try:
-            started = self.server.scanner.start_selected_import(source, signature, choice)
+            self.server.scanner.start_selected_import(source, signature, choice)
         except SelectionUnavailable as exc:
             self.send_error(HTTPStatus.CONFLICT, str(exc))
             return
         except Exception:
             LOGGER.exception("Serienauswahl konnte nicht gestartet werden")
             self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Serienimport konnte nicht gestartet werden")
-            return
-        if not started:
-            self.send_error(HTTPStatus.CONFLICT, "Ein anderer Lauf ist bereits aktiv")
             return
         self.send_response(HTTPStatus.SEE_OTHER)
         self.send_header("Location", "/#media-import")

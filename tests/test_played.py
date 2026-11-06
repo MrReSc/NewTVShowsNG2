@@ -31,7 +31,7 @@ def test_deleted_s05_variants_and_episodes_follow_fresh_jellyfin_status(tmp_path
     releases.append(show_release("S06"))
     scanner = Scanner(cfg, storage, renderer, jellyfin, Feeds(releases))
 
-    assert scanner.run()
+    assert scanner.run_feed()
     assert jellyfin.series_calls == ["show"]
     rows = storage.announcements()
     assert len(storage.announcements(current_only=True)) == 5  # 3 variants, E10, S06
@@ -55,7 +55,7 @@ def test_deleted_s05_variants_and_episodes_follow_fresh_jellyfin_status(tmp_path
     # No feed entries: existing history must still be refreshed.
     scanner.feeds = Feeds([])
     played[("show", 5)].add(10)
-    assert scanner.run()
+    assert scanner.run_feed()
     current = storage.announcements(current_only=True)
     assert len(current) == 1 and current[0]["season"] == 6
     assert all(
@@ -69,12 +69,12 @@ def test_deleted_s05_variants_and_episodes_follow_fresh_jellyfin_status(tmp_path
     scanner = Scanner(
         cfg, storage, renderer, Jellyfin(library, expected, played=played), Feeds([])
     )
-    assert scanner.run()
+    assert scanner.run_feed()
     assert len(storage.announcements(current_only=True)) == 5
 
     # API failure must discard previous watched counts and decisions.
     scanner.jellyfin = Jellyfin(library, error=JellyfinError("offline"))
-    assert scanner.run()
+    assert scanner.run_feed()
     assert len(storage.announcements(current_only=True)) == len(releases)
     assert all(
         row["jellyfin_played_episode_count"] is None for row in storage.announcements()
@@ -108,7 +108,6 @@ def test_coverage_uses_union_without_double_counting(available, played, reason, 
 def test_empty_expected_inventory_never_completes_a_season():
     library = Library([Series("show", "Show")])
     library.set_expected_episodes("show", 6, set())
-    assert library.season_is_complete("show", 6) is None
     assert _library_state(library, "show", 6, None).is_current
     assert _library_state(library, "show", 6, None).expected_count is None
 
@@ -123,7 +122,7 @@ def test_played_episode_without_missing_import_does_not_complete_season(tmp_path
         Jellyfin(library, {("show", 5): {1}}, played={("show", 5): {1}}),
         Feeds([show_release("S05"), show_release("S05E01")]),
     )
-    assert scanner.run()
+    assert scanner.run_feed()
     rows = {row["episode"]: row for row in storage.announcements()}
     assert rows[None]["is_current"]
     assert rows[None]["jellyfin_expected_episode_count"] is None
@@ -146,7 +145,7 @@ def test_partial_user_data_and_removed_series(tmp_path):
         jellyfin,
         Feeds([show_release("S05"), show_release("S05E01")]),
     )
-    assert scanner.run()
+    assert scanner.run_feed()
     rows = {row["episode"]: row for row in storage.announcements()}
     assert rows[None]["is_current"] and rows[None]["needed_episodes"] == [2]
     assert rows[None]["jellyfin_played_episode_count"] is None
@@ -155,7 +154,7 @@ def test_partial_user_data_and_removed_series(tmp_path):
 
     scanner.jellyfin = Jellyfin(Library([]))
     scanner.feeds = Feeds([])
-    assert scanner.run()
+    assert scanner.run_feed()
     assert not storage.announcements(current_only=True)
     assert all(row["status_reason"] == "removed" for row in storage.announcements())
     assert "Serie nicht mehr vorhanden" in cfg.output_path.read_text()
@@ -170,6 +169,6 @@ def test_invalid_user_is_visible_scan_error(tmp_path):
 
     jellyfin.load_library = fail
     scanner = Scanner(cfg, storage, renderer, jellyfin, Feeds([]))
-    assert not scanner.run()
+    assert not scanner.run_feed()
     assert storage.state()["scan_status"] == "error"
     assert "deaktiviert" in cfg.output_path.read_text()

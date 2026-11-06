@@ -18,7 +18,7 @@ from .storage import AnnouncementUnavailable, Storage
 
 LOGGER = logging.getLogger(__name__)
 ManualRun = Literal["feed", "import"]
-ScanRun = Literal["full", "feed", "import", "automatic_feed"]
+ScanRun = Literal["feed", "import", "automatic_feed"]
 
 
 class Scanner:
@@ -45,12 +45,6 @@ class Scanner:
         if self.importer is None and config.media_import_enabled:
             self.importer = MediaImporter(config, storage, self.jellyfin)
         self._lock = threading.Lock()
-
-    def run(self) -> bool:
-        with self._lock:
-            started_at = datetime.now(UTC)
-            self._begin_run("full", started_at)
-            return self._run_locked("full", started_at)
 
     def run_feed(self) -> bool:
         with self._lock:
@@ -183,7 +177,7 @@ class Scanner:
 
     def start_selected_import(
         self, source_path: str, signature: str, choice_key: str
-    ) -> bool:
+    ) -> None:
         if self.importer is None or not self.config.media_import_enabled:
             raise ValueError("Medienimport ist deaktiviert")
         # The import page can still contain another selection while the
@@ -205,7 +199,6 @@ class Scanner:
             )
             worker.start()
             started = True
-            return True
         except Exception:
             if began:
                 self.storage.fail_manual_import(
@@ -232,7 +225,7 @@ class Scanner:
             return
         next_run = (
             started_at + timedelta(seconds=self.config.interval_seconds)
-            if kind in ("full", "automatic_feed")
+            if kind == "automatic_feed"
             else None
         )
         self.storage.begin_scan(started_at, next_run, manual=kind == "feed")
@@ -259,9 +252,6 @@ class Scanner:
                 return True
 
             scan_warnings: list[str] = []
-            if kind == "full" and self.importer is not None:
-                import_result = self._import_media(library, started_at, force=False)
-                scan_warnings.extend(import_result.warnings)
             season_cache: set[tuple[str, int]] = set()
             series_cache: dict[str, dict[int, SeasonInventory] | None] = {}
             missing_metadata_warning_logged = False
@@ -386,7 +376,7 @@ class Scanner:
             completed_at = datetime.now(UTC)
             next_run = (
                 completed_at + timedelta(seconds=self.config.interval_seconds)
-                if kind in ("full", "automatic_feed")
+                if kind == "automatic_feed"
                 else None
             )
             self.storage.complete_scan(
@@ -413,7 +403,7 @@ class Scanner:
             else:
                 next_run = (
                     failed_at + timedelta(seconds=self.config.interval_seconds)
-                    if kind in ("full", "automatic_feed")
+                    if kind == "automatic_feed"
                     else None
                 )
                 self.storage.fail_scan(failed_at, next_run, message)
