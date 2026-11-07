@@ -80,6 +80,7 @@
     .badge.done { background: var(--success-soft); color: var(--success); }
     .badge.blocked { background: var(--danger-soft); color: var(--danger); }
     .import-target { display: block; margin-top: 5px; color: var(--muted); font-size: .8125rem; font-weight: 400; }
+    .import-details { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
     .empty { padding: 48px 20px; text-align: center; }
     .empty strong { display: block; margin-bottom: 4px; }
     .empty span { color: var(--muted); }
@@ -186,10 +187,10 @@
                       {% else %}<span class="badge warning">Wartet</span>{% endif %}
                     </td>
                     <td class="date-col" data-label="Details">
-                      <div>
-                      {{ item.reason or 'Wartet auf Importprüfung' }}
+                      <div class="import-details">
+                      <span>{{ item.reason or 'Wartet auf Importprüfung' }}</span>
                       {% if media_import_enabled and item.status == 'needs_selection' %}
-                        <br><a class="button" href="/media-import/resolve?source={{ item.source_path | urlencode }}">Serie zuordnen</a>
+                        <a class="button button-compact" href="/media-import/resolve?source={{ item.source_path | urlencode }}">Serie zuordnen</a>
                       {% endif %}
                       </div>
                     </td>
