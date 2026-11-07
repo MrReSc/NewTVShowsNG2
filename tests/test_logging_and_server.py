@@ -180,6 +180,7 @@ def test_server_serves_log_page(tmp_path) -> None:
         assert response.status == 200
         assert response.getheader("Cache-Control") == "no-store"
         assert "form-action 'self'" in response.getheader("Content-Security-Policy")
+        assert "font-src 'self'" in response.getheader("Content-Security-Policy")
         assert "scan complete" in content
         connection.close()
         connection = http.client.HTTPConnection(*server.server_address, timeout=3)
@@ -302,6 +303,7 @@ def test_action_error_pages_escape_messages_and_keep_recovery_links(tmp_path) ->
                 assert response.status == status
                 assert response.getheader("Cache-Control") == "no-store"
                 assert "frame-ancestors 'none'" in response.getheader("Content-Security-Policy")
+                assert "font-src 'self'" in response.getheader("Content-Security-Policy")
                 assert 'aria-label="Ansichten"' in html
                 assert f'href="{return_url}">{label}</a>' in html
                 assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
@@ -314,12 +316,26 @@ def test_action_error_pages_escape_messages_and_keep_recovery_links(tmp_path) ->
             response = connection.getresponse()
             assert "script-src 'self'" in response.getheader("Content-Security-Policy")
             assert "connect-src 'self'" in response.getheader("Content-Security-Policy")
+            assert "font-src 'self'" in response.getheader("Content-Security-Policy")
             response.read()
             connection.request("GET", "/ui.js")
             response = connection.getresponse()
             assert response.status == 200
             assert response.getheader("Content-Type") == "text/javascript; charset=utf-8"
             assert b"data-run-feedback" in response.read()
+            connection.request("GET", "/fonts/inter-4.1.woff2")
+            response = connection.getresponse()
+            font = response.read()
+            assert response.status == 200
+            assert response.getheader("Content-Type") == "font/woff2"
+            assert response.getheader("Content-Length") == str(len(font))
+            assert response.getheader("Cache-Control") == "public, max-age=31536000, immutable"
+            assert response.getheader("X-Content-Type-Options") == "nosniff"
+            assert font.startswith(b"wOF2")
+            connection.request("GET", "/fonts/../server.py")
+            response = connection.getresponse()
+            assert response.status == 404
+            response.read()
         finally:
             connection.close()
     finally:

@@ -185,12 +185,12 @@ def test_season_range_creates_independent_entries_and_statuses(tmp_path) -> None
 
     html = cfg.output_path.read_text(encoding="utf-8")
     current_html, history_html = release_views(html)
-    assert "The Walking Dead: Dead City · S04" in current_html
-    assert "The Walking Dead: Dead City · S06" in current_html
-    assert "The Walking Dead: Dead City · S03" not in current_html
-    assert "The Walking Dead: Dead City · S05" not in current_html
+    assert 'class="episode-code">S04</span>' in current_html
+    assert 'class="episode-code">S06</span>' in current_html
+    assert 'class="episode-code">S03</span>' not in current_html
+    assert 'class="episode-code">S05</span>' not in current_html
     for season in range(3, 7):
-        assert f"The Walking Dead: Dead City · S{season:02d}" in history_html
+        assert f'class="episode-code">S{season:02d}</span>' in history_html
 
 
 def test_changed_season_range_removes_obsolete_derived_entries(tmp_path) -> None:
@@ -250,7 +250,7 @@ def test_range_quality_variants_are_grouped_once_per_season(tmp_path) -> None:
     current_html, _ = release_views(html)
     assert current_html.count('data-label="Release"') == 2
     for season in (3, 4):
-        assert f"The Walking Dead: Dead City · S{season:02d}" in current_html
+        assert f'class="episode-code">S{season:02d}</span>' in current_html
     assert current_html.count(">720p</a>") == 2
     assert current_html.count(">1080p</a>") == 2
 
@@ -337,14 +337,17 @@ def test_release_variants_stay_stored_but_are_grouped_in_current_view(
     html = cfg.output_path.read_text(encoding="utf-8")
     current_html, history_html = release_views(html)
     assert current_html.count('data-label="Release"') == 1
-    assert f">The Walking Dead: Dead City · {marker}</span>" in current_html
+    assert ">The Walking Dead: Dead City</span>" in current_html
+    assert f'class="episode-code">{marker}</span>' in current_html
     assert ">720p</a>" in current_html
     assert ">1080p</a>" in current_html
     assert 'href="https://feed.test/post-1"' in current_html
     assert 'href="https://feed.test/post-2"' in current_html
     assert current_html.index(">720p</a>") < current_html.index(">1080p</a>")
     assert history_html.count('data-label="Eintrag"') == 2
-    assert history_html.count(f">The Walking Dead: Dead City · {marker}</a>") == 2
+    assert history_html.count(">The Walking Dead: Dead City</a>") == 2
+    assert history_html.count(f'class="episode-code">{marker}</span>') == 2
+    assert " · " not in html
     assert f'title="{first.title}"' in history_html
     assert f'title="{second.title}"' in history_html
     for section in (current_html, history_html):
@@ -501,8 +504,8 @@ def test_current_grouping_key_and_aggregated_fields() -> None:
     assert grouped["match_warning"]
     assert set(grouped["source_keys"]) == {"old", "new"}
     assert [variant["label"] for variant in grouped["variants"]] == [
-        "1080p · WAYNE",
-        "1080p · WvF",
+        "1080p WAYNE",
+        "1080p WvF",
     ]
 
 

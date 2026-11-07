@@ -79,7 +79,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; "
+            "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self'; "
             "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
         )
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -240,6 +240,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._serve_favicon()
         elif path == "/ui.js":
             self._serve_ui_script()
+        elif path == "/fonts/inter-4.1.woff2":
+            self._serve_font()
         elif path in ("/series-image", "/series-placeholder.svg"):
             self._serve_series_image(path)
         elif path == "/healthz":
@@ -304,7 +306,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; "
+            "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self'; "
             "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
         )
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -324,7 +326,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; "
+            "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self'; base-uri 'none'; "
             "script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'",
         )
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -345,7 +347,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; "
+            "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self'; "
             "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
         )
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -395,6 +397,16 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/javascript; charset=utf-8")
         self.send_header("Content-Length", str(len(content)))
         self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(content)
+
+    def _serve_font(self) -> None:
+        content = files("newtvshowsng2").joinpath("static/fonts/inter-4.1.woff2").read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "font/woff2")
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "public, max-age=31536000, immutable")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(content)

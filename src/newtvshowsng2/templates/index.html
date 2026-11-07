@@ -28,7 +28,7 @@
     .alert { margin: 0 0 18px; padding: 18px 20px; border: 1px solid #63513a; border-radius: var(--radius-surface); background: var(--warning-soft); color: var(--warning); }
     .alert.error { border-color: #704d47; background: var(--danger-soft); color: var(--danger); }
     .alert.run-feedback { border-color: #585858; background: var(--accent-soft); color: var(--text); }
-    .alert strong { display: block; margin-bottom: 2px; }
+    .alert strong { display: block; margin-bottom: 4px; }
     .alert.details { white-space: pre-line; }
     .alert ul { margin: 6px 0 0; padding-left: 20px; }
     .tab-anchor { position: fixed; top: 0; left: 0; width: 0; height: 0; overflow: hidden; pointer-events: none; }
@@ -42,49 +42,57 @@
     .panel.current { border-color: #414141; }
     .table-wrap { overflow-x: auto; scrollbar-color: var(--border) var(--surface); }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .release-table { --release-row-height: 5.25rem; }
     th, td { padding: 18px 20px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
-    th { background: transparent; color: var(--muted); font-size: .8125rem; font-weight: 500; letter-spacing: .01em; }
+    th { background: transparent; color: var(--text-secondary); font-size: var(--type-label); font-weight: var(--weight-medium); line-height: var(--leading-compact); }
     tbody tr:last-child td { border-bottom: 0; }
     tbody tr:hover { background: var(--surface-hover); }
-    .release { width: 46%; overflow-wrap: anywhere; font-size: .9375rem; font-weight: 600; }
+    .release { width: 46%; overflow-wrap: anywhere; }
+    td.release { font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--leading-compact); }
     .release-title { display: block; }
-    .release-content .release-title { max-height: 2.8em; overflow: auto; scrollbar-width: thin; }
+    .release-title :where(a) { color: var(--text); }
+    .release-content .release-title { flex: 0 0 auto; max-width: 100%; min-height: calc(1em * var(--leading-compact)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .release-content .release-title:focus-within { overflow-x: auto; text-overflow: clip; scrollbar-width: none; }
     .release-table tbody td { padding-top: 18px; padding-bottom: 18px; }
     .release-table tbody tr:last-child td { border-bottom: 1px solid transparent; }
-    .release-table .cell-content { height: 90px; overflow: auto; scrollbar-width: thin; }
-    .release-table .inventory .cell-content { font-size: .9375rem; line-height: 1.5; }
-    .release-layout { display: flex; align-items: flex-start; gap: 14px; height: 90px; }
-    .series-poster { flex: 0 0 56px; width: 56px; height: 84px; object-fit: cover; border-radius: var(--radius-detail); background: #252525; }
-    .release-content { flex: 1; min-width: 0; max-height: 90px; overflow: auto; scrollbar-width: thin; line-height: 1.4; }
-    .release-table .variant-links { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 3px; scrollbar-width: thin; }
+    .release-table .cell-content { height: var(--release-row-height); overflow: auto; scrollbar-width: thin; }
+    .release-table .inventory .cell-content { font-size: var(--type-body); line-height: var(--leading-body); font-variant-numeric: lining-nums tabular-nums; }
+    .release-layout { display: flex; align-items: flex-start; gap: 14px; height: var(--release-row-height); }
+    .series-poster { flex: 0 0 3.5rem; width: 3.5rem; height: var(--release-row-height); object-fit: cover; border-radius: var(--radius-control); background: #252525; }
+    .release-content { display: flex; flex-direction: column; justify-content: space-between; flex: 1; min-width: 0; height: var(--release-row-height); }
+    .release-details { display: contents; font-weight: var(--weight-regular); }
+    .release-table .variant-links { flex: 0 0 auto; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
     .release-table .variant-links a { flex: 0 0 auto; }
     .release-table .status-col .cell-content { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
     .release-table .badge-row { min-height: 0; overflow: auto; scrollbar-width: thin; }
     .release-table .complete-action { flex: 0 0 auto; margin-top: 0; }
-    .variant-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .variant-links a { padding: 3px 9px; border-radius: var(--radius-detail); font-size: .75rem; font-weight: 500; text-decoration: none; }
-    .type-marker { display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; color: var(--muted); font-size: .75rem; font-weight: 500; }
+    .variant-links { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
+    .variant-links a { padding: 3px 9px; border-radius: var(--radius-control); font-size: var(--type-caption); font-weight: var(--weight-medium); line-height: var(--leading-compact); text-decoration: none; }
+    .type-marker { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: var(--type-caption); font-weight: var(--weight-regular); line-height: var(--leading-compact); }
     .type-marker svg { width: 14px; height: 14px; flex: 0 0 auto; }
-    .inventory { width: 20%; white-space: nowrap; }
-    .inventory small { display: block; margin-top: 4px; color: var(--muted); font-size: .8125rem; }
+    .inventory { width: 20%; white-space: normal; }
+    .inventory small { display: block; margin-top: 4px; color: var(--muted); font-size: var(--type-caption); line-height: var(--leading-compact); }
+    .inventory .import-metadata { display: flex; flex-wrap: wrap; gap: 4px 12px; }
     #media-import-view .inventory { white-space: normal; overflow-wrap: anywhere; }
     .history-import .inventory { white-space: normal; overflow-wrap: anywhere; }
-    .history-target { display: -webkit-box; max-height: 3em; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; }
+    .history-target { display: -webkit-box; max-height: calc(2em * var(--leading-body)); overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; }
     .status-col { width: 14%; }
-    .date-col { width: 20%; color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
+    .date-col { width: 20%; color: var(--text); font-size: var(--type-body); font-weight: var(--weight-regular); line-height: var(--leading-body); font-variant-numeric: lining-nums tabular-nums; }
+    th.date-col { color: var(--text-secondary); font-size: var(--type-label); }
+    #media-import-view .date-col { color: var(--text-secondary); font-size: var(--type-label); line-height: var(--leading-body); }
     .badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
     .complete-action { margin: 10px 0 0; }
-    .badge { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border: 1px solid transparent; border-radius: var(--radius-detail); font-size: .75rem; font-weight: 500; line-height: 1.2; }
+    .badge { display: inline-flex; align-items: center; width: fit-content; max-width: 100%; min-height: 26px; padding: 3px 8px; border: 1px solid transparent; border-radius: var(--radius-control); font-size: var(--type-caption); font-weight: var(--weight-medium); line-height: var(--leading-compact); }
     .badge.new { background: var(--info-soft); color: var(--info); }
     .badge.open, .badge.warning { background: var(--warning-soft); color: var(--warning); }
     .badge.done { background: var(--success-soft); color: var(--success); }
     .badge.blocked { background: var(--danger-soft); color: var(--danger); }
-    .import-target { display: block; margin-top: 5px; color: var(--muted); font-size: .8125rem; font-weight: 400; }
+    .import-target { display: block; margin-top: 6px; color: var(--muted); font-size: var(--type-caption); font-weight: var(--weight-regular); line-height: var(--leading-compact); }
     .import-details { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
     .empty { padding: 48px 20px; text-align: center; }
-    .empty strong { display: block; margin-bottom: 4px; }
-    .empty span { color: var(--muted); }
-    footer { margin-top: 30px; color: var(--muted); font-size: .74rem; text-align: right; }
+    .empty strong { display: block; margin-bottom: 6px; }
+    .empty span { color: var(--muted); font-size: var(--type-label); }
+    footer { margin-top: 30px; color: var(--muted); font-size: var(--type-caption); line-height: var(--leading-compact); text-align: right; }
 
     @media (min-width: 761px) {
       #history-view .inventory { width: 24%; }
@@ -96,25 +104,22 @@
       .table-wrap { overflow: visible; }
       table, thead, tbody, tr, th, td { display: block; width: 100% !important; }
       thead { position: absolute; width: 1px !important; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-      tbody { display: grid; gap: 10px; }
-      tr { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
+      tbody { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+      tr { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
       .current tr { border-color: #414141; }
       td { display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 10px; padding: 6px 0; border: 0; white-space: normal; }
-      td::before { color: var(--muted); content: attr(data-label); font-size: .68rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
-      td.release { display: block; padding: 0 0 10px; font-size: .94rem; }
+      td::before { color: var(--muted); content: attr(data-label); font-size: var(--type-caption); font-weight: var(--weight-medium); line-height: var(--leading-compact); }
+      td.release { display: block; padding: 0 0 10px; }
       td.release::before { display: none; }
       .release-table tbody td { padding-top: 2px; padding-bottom: 2px; }
       .release-table tbody tr { padding: 10px; }
       .release-table tbody tr:last-child td { border-bottom: 0; }
       .release-table td.release { padding-top: 0; padding-bottom: 8px; }
-      .release-table .release-layout { height: 84px; }
-      .release-table .release-content { max-height: 84px; }
-      .release-table .inventory .cell-content { height: 76px; font-size: .85rem; }
-      .release-table .inventory small { font-size: .75rem; line-height: 1.25; }
-      .release-table .status-col .cell-content { height: 30px; flex-direction: row; align-items: flex-start; }
-      .release-table .status-col .badge-row { max-height: 30px; }
+      .release-table .inventory .cell-content { height: 4.75rem; }
+      .release-table .status-col .cell-content { height: 2.125rem; flex-direction: row; align-items: flex-start; }
+      .release-table .status-col .badge-row { max-height: 2.125rem; }
       .release-table .complete-action button { white-space: nowrap; }
-      .release-table .date-col .cell-content { height: 24px; }
+      .release-table .date-col .cell-content { height: 1.75rem; }
     }
     @media (max-width: 470px) {
       td { grid-template-columns: 88px minmax(0, 1fr); }
@@ -235,30 +240,36 @@
               {% for row in rows %}
                 <tr{% if not current_panel %} class="history-{{ row.kind }}"{% endif %}>
                   {% if not current_panel and row.kind == 'import' %}
-                    <td class="release" data-label="Eintrag"><div class="release-layout">{{ series_poster(row) }}<div class="release-content" tabindex="0"><span class="release-title">{{ row.source_path }}</span>{{ type_marker('import') }}</div></div></td>
+                    <td class="release" data-label="Eintrag"><div class="release-layout">{{ series_poster(row) }}<div class="release-content"><span class="release-title" title="{{ row.source_path }}" tabindex="0">{{ row.source_path }}</span><span class="release-details">{{ type_marker('import') }}</span></div></div></td>
                     <td class="inventory" data-label="Bestand / Ziel">
                       <div class="cell-content" tabindex="0">
                       {% set target_path = row.target_path or '–' %}
                       {% set target_parts = target_path.rsplit('/', 2) %}
                       <span class="history-target" title="{{ target_path }}">{% if target_parts | length == 3 %}…/{{ target_parts[1] }}/{{ target_parts[2] }}{% else %}{{ target_path }}{% endif %}</span>
-                      <small>{% if row.season is not none and row.episode is not none %}S{{ "%02d" | format(row.season) }}E{{ "%02d" | format(row.episode) }}{% else %}Episode unbekannt{% endif %}{% if row.parsed_title %} · {{ row.parsed_title }}{% endif %}</small>
+                      <small class="import-metadata"><span>{% if row.season is not none and row.episode is not none %}S{{ "%02d" | format(row.season) }}E{{ "%02d" | format(row.episode) }}{% else %}Episode unbekannt{% endif %}</span>{% if row.parsed_title %}<span>{{ row.parsed_title }}</span>{% endif %}</small>
                       </div>
                     </td>
                     <td class="status-col" data-label="Status"><div class="cell-content"><span class="badge done">Übernommen</span></div></td>
                     <td class="date-col" data-label="Datum"><div class="cell-content">{{ row.history_at | local_datetime }}</div></td>
                   {% else %}
                     <td class="release" data-label="{% if current_panel %}Release{% else %}Eintrag{% endif %}">
-                      <div class="release-layout">{{ series_poster(row) }}<div class="release-content" tabindex="0">
+                      <div class="release-layout">{{ series_poster(row) }}<div class="release-content">
                       {% if current_panel %}
-                        <span class="release-title">{{ row.display_title }}</span>
+                        <span class="release-title" title="{{ row.matched_series_name }}" tabindex="0">{{ row.matched_series_name }}</span>
+                        <span class="release-details">
+                        <span class="episode-code">S{{ "%02d" | format(row.season) }}{% if row.episode is not none %}E{{ "%02d" | format(row.episode) }}{% endif %}</span>
                         <span class="variant-links">
                           {% for variant in row.variants %}
                             <a href="{{ variant.link }}" title="{{ variant.title }}" target="_blank" rel="noopener noreferrer">{{ variant.label }}</a>
                           {% endfor %}
                         </span>
+                        </span>
                       {% else %}
-                        <span class="release-title"><a href="{{ row.link }}" title="{{ row.title }}" target="_blank" rel="noopener noreferrer">{{ row.matched_series_name }} · S{{ "%02d" | format(row.season) }}{% if row.episode is not none %}E{{ "%02d" | format(row.episode) }}{% endif %}</a></span>
+                        <span class="release-title"><a href="{{ row.link }}" title="{{ row.title }}" target="_blank" rel="noopener noreferrer">{{ row.matched_series_name }}</a></span>
+                        <span class="release-details">
+                        <span class="episode-code">S{{ "%02d" | format(row.season) }}{% if row.episode is not none %}E{{ "%02d" | format(row.episode) }}{% endif %}</span>
                         {{ type_marker('feed') }}
+                        </span>
                       {% endif %}
                       </div></div>
                     </td>

@@ -172,7 +172,7 @@ def _build_release_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if newest["episode"] is not None:
         marker += f"E{int(newest['episode']):02d}"
     base_title = newest["matched_series_name"]
-    group["display_title"] = f"{base_title} · {marker}"
+    group["display_title"] = f"{base_title}, {marker}"
     group["is_new"] = any(bool(row["is_new"]) for row in rows)
     group["match_warning"] = any(bool(row["match_warning"]) for row in rows)
     group["source_keys"] = [row["source_key"] for row in rows]
@@ -212,7 +212,7 @@ def _release_variants(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         elif base_label == "Quelle":
             candidate = base_label
         elif item["release_group"]:
-            candidate = f"{base_label} · {item['release_group']}"
+            candidate = f"{base_label} {item['release_group']}"
         else:
             candidate = base_label
         item["candidate_label"] = candidate

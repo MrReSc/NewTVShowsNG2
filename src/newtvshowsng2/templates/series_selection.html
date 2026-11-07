@@ -4,23 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Serienzuordnung · NewTVShowsNG2</title>
+  <title>Serienzuordnung: NewTVShowsNG2</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   {% include "_theme.html" %}
   <style>
     main { width: min(820px, calc(100% - 32px)); margin: 32px auto 64px; }
     h1 { margin: 28px 0 12px; }
-    p { color: var(--muted); max-width: 72ch; }
+    p { color: var(--text-secondary); max-width: 72ch; }
     .source { overflow-wrap: anywhere; color: var(--text); }
     .choice { border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); margin: 20px 0; padding: 24px; }
     .choice h2 { margin: 0 0 6px; }
     .ids { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0; }
-    .ids span { color: var(--muted); font: .8125rem var(--font-data); overflow-wrap: anywhere; }
+    .ids span { color: var(--muted); font: var(--weight-regular) var(--type-caption)/var(--leading-compact) var(--font-data); font-variant-numeric: slashed-zero; overflow-wrap: anywhere; }
     .choice form { margin-top: 16px; }
     .scope { margin: 24px 0; color: var(--text); }
     .scope ul { max-height: 240px; margin: 10px 0 0; padding-left: 0; overflow: auto; list-style: none; }
-    .scope li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: baseline; margin: 10px 0; overflow-wrap: anywhere; font-size: .875rem; font-variant-numeric: tabular-nums; }
-    .scope small { display: block; color: var(--muted); font-size: .8125rem; }
+    .scope li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: baseline; margin: 10px 0; overflow-wrap: anywhere; font-size: var(--type-label); font-variant-numeric: lining-nums tabular-nums; }
+    .scope small { display: block; color: var(--muted); font-size: var(--type-caption); line-height: var(--leading-compact); }
     .shared-scope { padding: 0 0 20px; border-bottom: 1px solid var(--border); }
   </style>
 </head>

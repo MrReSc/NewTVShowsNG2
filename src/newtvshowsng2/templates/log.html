@@ -6,29 +6,29 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#121212">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <title>Log · NewTVShowsNG2</title>
+  <title>Log: NewTVShowsNG2</title>
   {% include "_theme.html" %}
   <style>
     .heading { display: flex; align-items: flex-end; justify-content: flex-start; flex-wrap: wrap; gap: 12px 18px; margin-bottom: 24px; }
     .log-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
     .filters { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
-    .filters label { display: grid; gap: 5px; color: var(--muted); font-size: .8rem; }
-    .filters select, .filters input { min-height: 39px; padding: 8px 10px; font: inherit; font-size: .9rem; }
+    .filters label { display: grid; gap: 6px; color: var(--muted); font-size: var(--type-caption); line-height: var(--leading-compact); }
+    .filters select, .filters input { min-height: 39px; padding: 8px 10px; font-size: var(--type-label); line-height: var(--leading-compact); }
     .filters .search { flex: 1 1 220px; }
     .filters input { width: 100%; }
-    .result-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 18px; margin: 0 0 10px; color: var(--muted); font-size: .82rem; }
+    .result-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 18px; margin: 0 0 10px; color: var(--muted); font-size: var(--type-caption); line-height: var(--leading-compact); }
     .entries { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
-    .entry { display: grid; grid-template-columns: 210px 82px minmax(0, 1fr); gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
+    .entry { display: grid; grid-template-columns: 15rem 5.125rem minmax(0, 1fr); gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
     .entry:last-child { border-bottom: 0; }
-    .time { color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
-    .level { align-self: start; width: fit-content; padding: 2px 6px; border: 1px solid transparent; border-radius: var(--radius-detail); background: #292929; color: var(--muted); font: 600 .72rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .time { color: var(--text); font-size: var(--type-body); font-weight: var(--weight-regular); line-height: var(--leading-body); font-variant-numeric: lining-nums tabular-nums; }
+    .level { align-self: start; width: fit-content; min-height: 26px; padding: 3px 8px; border: 1px solid transparent; border-radius: var(--radius-control); background: var(--accent-soft); color: var(--text-secondary); font-size: var(--type-caption); font-weight: var(--weight-medium); line-height: var(--leading-compact); }
     .level.warning { background: var(--warning-soft); color: var(--warning); }
     .level.error, .level.critical { background: var(--danger-soft); color: var(--danger); }
     .body { min-width: 0; }
-    .message { margin: 0; font-size: .9375rem; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
-    .source { display: block; margin-top: 4px; color: var(--muted); font-size: .76rem; overflow-wrap: anywhere; }
+    .message { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; white-space: pre-wrap; }
+    .source { display: block; margin-top: 6px; color: var(--muted); font-size: var(--type-caption); line-height: var(--leading-compact); overflow-wrap: anywhere; }
     .empty { padding: 38px 16px; color: var(--muted); text-align: center; }
-    .pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; font-size: .85rem; }
+    .pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 14px; margin-top: 18px; color: var(--muted); font-size: var(--type-label); }
     @media (max-width: 800px) { .entry { grid-template-columns: auto 1fr; gap: 5px 10px; } .body { grid-column: 1 / -1; } }
     @media (max-width: 760px) { .shell { width: min(100% - 24px, 680px); padding-top: 16px; } .heading { align-items: flex-start; } }
   </style>
