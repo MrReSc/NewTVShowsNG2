@@ -43,6 +43,7 @@
     --radius-control: 6px;
     --radius-surface: 10px;
     --radius-pill: 999px;
+    --navigation-offset: 24px;
   }
   * { box-sizing: border-box; }
   .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
@@ -64,7 +65,7 @@
     --interaction-text: var(--control-text);
     --interaction-hover-fill: var(--control-hover);
   }
-  :is(button, .button, .return, .variant-links a, input:not([type="hidden"]), select) {
+  :is(button, .button, .return, .variant-links a, input:not([type="hidden"]), select, .history-filters label) {
     --interaction-fill: var(--control);
     --interaction-border: var(--control-border);
   }
@@ -96,7 +97,6 @@
   input[type="checkbox"]::before { width: 9px; height: 5px; border-bottom: 2px solid currentColor; border-left: 2px solid currentColor; transform: translateY(-1px) rotate(-45deg); visibility: hidden; content: ""; }
   input[type="checkbox"]:checked::before { visibility: visible; }
   input[type="checkbox"]:disabled { cursor: not-allowed; }
-  .history-filters label { padding: 4px 8px; border-radius: var(--radius-control); }
   details[open] > summary,
   input[type="checkbox"]:checked,
   .history-filters label:has(input:checked),
@@ -113,15 +113,17 @@
   .variant-links a:visited { color: var(--control-on-visited); background-color: var(--control-visited); border-color: var(--control-visited); }
   .variant-links a:visited:hover { color: var(--control-on-visited); background-color: var(--control-visited-hover); border-color: var(--control-visited-hover); }
   .variant-links a:visited:active { color: var(--control-on-visited); background-color: var(--control-visited); border-color: var(--control-border-pressed); }
-  .shell { width: min(1320px, calc(100% - 64px)); margin: 0 auto; padding: 24px 0 56px; }
-  .topbar { position: sticky; z-index: 5; top: 0; margin-bottom: 24px; padding-bottom: 12px; background: var(--background); }
+  .shell { width: min(1320px, calc(100% - 64px)); margin: 0 auto; padding: var(--navigation-offset) 0 56px; }
+  .topbar { position: sticky; z-index: 5; top: var(--navigation-offset); margin-bottom: 24px; padding-bottom: 12px; background: var(--background); }
+  .topbar::before { position: absolute; inset: calc(-1 * var(--navigation-offset)) 0 100%; background: var(--background); pointer-events: none; content: ""; }
   .nav { display: flex; gap: 4px; width: fit-content; max-width: 100%; margin: 0; padding: 5px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
   .nav a { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 9px 17px; border-radius: var(--radius-pill); font: 500 .875rem/1.4 var(--font-interface); text-decoration: none; white-space: nowrap; }
-  button, .button, .return { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 14px; border-radius: var(--radius-control); font: 500 .875rem/1.4 var(--font-interface); text-decoration: none; cursor: pointer; }
+  button, .button, .return, .history-filters label { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 14px; border-radius: var(--radius-control); font: 500 .875rem/1.4 var(--font-interface); text-decoration: none; cursor: pointer; }
   .complete-action button { min-height: 30px; padding: 4px 10px; font-size: .8125rem; }
   .run-feedback button { min-height: 34px; font-size: .8125rem; }
   @media (max-width: 760px) {
-    .shell { width: calc(100% - 32px); padding-top: 16px; }
+    :root { --navigation-offset: 16px; }
+    .shell { width: calc(100% - 32px); }
     .topbar { margin-bottom: 20px; }
   }
   @media (max-width: 470px) {

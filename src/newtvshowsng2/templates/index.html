@@ -16,9 +16,8 @@
     [hidden] { display: none !important; }
     .run-feedback p { margin: 0 0 8px; }
     .run-feedback form { margin: 0; }
-    .history-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin: -6px 0 18px; padding: 0; border: 0; }
-    .history-filters legend { margin-bottom: 7px; color: var(--muted); font-size: .8125rem; }
-    .history-filters label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: .85rem; }
+    .history-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 0 24px; padding: 0; border: 0; }
+    .history-filters label { gap: 8px; }
     .history-filters input { width: 17px; height: 17px; margin: 0; }
     .history-filter-empty { display: none; }
     #history-view:has(#history-filter-feed:not(:checked)) .history-feed,
@@ -70,6 +69,7 @@
     .inventory small { display: block; margin-top: 4px; color: var(--muted); font-size: .8125rem; }
     #media-import-view .inventory { white-space: normal; overflow-wrap: anywhere; }
     .history-import .inventory { white-space: normal; overflow-wrap: anywhere; }
+    .history-target { display: -webkit-box; max-height: 3em; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; }
     .status-col { width: 14%; }
     .date-col { width: 20%; color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
     .badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -85,6 +85,10 @@
     .empty span { color: var(--muted); }
     footer { margin-top: 30px; color: var(--muted); font-size: .74rem; text-align: right; }
 
+    @media (min-width: 761px) {
+      #history-view .inventory { width: 24%; }
+      #history-view .date-col { width: 16%; padding-inline: 12px; }
+    }
     @media (max-width: 760px) {
       .shell { width: min(100% - 24px, 680px); padding-top: 16px; }
       .panel { overflow: visible; border: 0; background: transparent; }
@@ -131,7 +135,7 @@
       <h1 class="visually-hidden" id="media-import-title">Medienimport</h1>
       {% if media_import_enabled %}
         <div class="actions" aria-label="Medienimport-Aktionen">
-          <form method="post" action="/run/income-scan"><button type="submit" data-run-start {% if busy %}disabled{% endif %}>Download jetzt scannen</button></form>
+          <form method="post" action="/run/income-scan"><button type="submit" data-run-start {% if busy %}disabled{% endif %}>Import Ordner scannen</button></form>
           <form method="post" action="/run/import"><button type="submit" data-run-start {% if busy %}disabled{% endif %}>Dateien jetzt einsortieren</button></form>
         </div>
       {% endif %}
@@ -233,7 +237,9 @@
                     <td class="release" data-label="Eintrag"><div class="release-layout">{{ series_poster(row) }}<div class="release-content" tabindex="0"><span class="release-title">{{ row.source_path }}</span>{{ type_marker('import') }}</div></div></td>
                     <td class="inventory" data-label="Bestand / Ziel">
                       <div class="cell-content" tabindex="0">
-                      {{ row.target_path or '–' }}
+                      {% set target_path = row.target_path or '–' %}
+                      {% set target_parts = target_path.rsplit('/', 2) %}
+                      <span class="history-target" title="{{ target_path }}">{% if target_parts | length == 3 %}…/{{ target_parts[1] }}/{{ target_parts[2] }}{% else %}{{ target_path }}{% endif %}</span>
                       <small>{% if row.season is not none and row.episode is not none %}S{{ "%02d" | format(row.season) }}E{{ "%02d" | format(row.episode) }}{% else %}Episode unbekannt{% endif %}{% if row.parsed_title %} · {{ row.parsed_title }}{% endif %}</small>
                       </div>
                     </td>
@@ -338,7 +344,7 @@
       </div>
       {% if history %}
       <fieldset class="history-filters">
-        <legend>Einträge anzeigen</legend>
+        <legend class="visually-hidden">Einträge anzeigen</legend>
         <label><input id="history-filter-feed" type="checkbox" checked> Feed</label>
         <label><input id="history-filter-import" type="checkbox" checked> Import</label>
       </fieldset>

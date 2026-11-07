@@ -433,7 +433,7 @@ def test_ui_labels_and_link_states_render_consistently(tmp_path) -> None:
         < nav.index(">Historie</a>")
         < nav.index(">Log</a>")
     )
-    assert "Download jetzt scannen" in html
+    assert "Import Ordner scannen" in html
     assert "Download ist leer" in html
     assert "Keine offenen Importe" in html
     assert 'class="section-note"' not in html
