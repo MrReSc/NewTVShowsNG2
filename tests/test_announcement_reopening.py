@@ -49,7 +49,9 @@ def test_history_can_reopen_one_variant_without_rss_or_media_actions(app, monkey
     assert [row["source_key"] for row in storage.announcements(current_only=True)] == [keys[0]]
     assert storage.state() == state
     current, history = release_views(cfg.output_path.read_text())
-    assert "Dead City · S03E07" in current
+    assert "The Walking Dead: Dead City" in current
+    assert 'class="episode-code">S03E07</span>' in current
+    assert CompletionForms(current).groups == [[keys[0]]]
     assert CompletionForms(history, "/announcements/reopen").groups == [[keys[1]]]
     assert history.count('class="badge done">Erledigt') == 1
     assert history.count('class="badge open">Fehlend') == 1

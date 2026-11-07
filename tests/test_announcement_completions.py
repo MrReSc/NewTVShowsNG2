@@ -83,7 +83,8 @@ def test_completion_moves_displayed_variants_to_history_without_external_calls(a
     assert storage.state() == state
     assert not storage.announcements(current_only=True)
     current, history = release_views(cfg.output_path.read_text(encoding="utf-8"))
-    assert "Dead City · S03E07" not in current
+    assert "The Walking Dead: Dead City" not in current
+    assert 'class="episode-code">S03E07</span>' not in current
     assert history.count('<span class="badge done">Erledigt</span>') == 2
     assert '<span class="badge open">Fehlend</span>' not in history
     assert '<span class="badge new">Neu</span>' not in history
@@ -515,5 +516,6 @@ def test_completion_can_be_retried_after_render_failure(app, http_app, monkeypat
     monkeypatch.setattr(scanner.renderer, "render", render)
     assert request(body)[:2] == (303, "/#overview")
     current, history = release_views(cfg.output_path.read_text(encoding="utf-8"))
-    assert "Dead City · S03E07" not in current
+    assert "The Walking Dead: Dead City" not in current
+    assert 'class="episode-code">S03E07</span>' not in current
     assert history.count('class="badge done">Erledigt') == 2
