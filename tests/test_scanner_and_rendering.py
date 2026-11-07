@@ -441,17 +441,17 @@ def test_ui_labels_and_link_states_render_consistently(tmp_path) -> None:
     assert "Download ist leer" in html
     assert "Keine offenen Importe" in html
     assert 'class="section-note"' not in html
-    assert "--link: #a6b9c9" in html
-    assert "--visited: #b3a6bd" in html
+    assert "--link: #d0d0d0" in html
+    assert "--visited: #b0b0b0" in html
     assert ".release a:visited { color: var(--visited); }" in html
-    assert ".variant-links a:visited { color: var(--visited);" in html
+    assert ".variant-links a:visited {" in html
 
     selection_html = renderer.render_selection(
         SimpleNamespace(source_path="show.mkv", signature="signature", choices=())
     )
     assert "Download: show.mkv" in selection_html
     assert "a:visited { color: var(--visited); }" in selection_html
-    assert "Die Auswahl importiert alle aktuell gefundenen Folgen" in selection_html
+    assert "Die Bestätigung startet deren Import sofort" in selection_html
 
 
 def test_current_grouping_key_and_aggregated_fields() -> None:

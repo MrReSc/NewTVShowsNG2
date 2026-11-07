@@ -94,7 +94,7 @@ def test_title_mismatch_requires_confirmation_and_uses_jellyfin_path(
     assert options.choices[0].existing_series.id == "dark-matter"
     html = Renderer(storage, config.output_path, config.timezone, True).render_selection(options)
     assert "Release-Titel: Dark.Matter.Der.Zeitenlaeufer" in html
-    assert "<h2>Dark Matter (2024)</h2>" in html
+    assert '<h2 id="choice-1">Dark Matter (2024)</h2>' in html
     assert "Serienjahr: 2024" in html
     assert "tt19231492" in html
     assert "Die Bestätigung gilt nur für diesen Import" in html
@@ -253,6 +253,15 @@ def test_one_selection_imports_whole_series_and_waits_for_jellyfin(tmp_path) -> 
     config, storage, importer, jellyfin, sources, unrelated = _prepare(tmp_path)
     options = importer.selection_options(sources[0].name)
     assert len(options.choices) == 2
+    assert {item.source_path for item in options.choices[0].sources} == {
+        source.name for source in sources
+    }
+    html = Renderer(storage, config.output_path, config.timezone, True).render_selection(options)
+    assert "2 Quellen für diesen Import" in html
+    assert "2 Quellen für Eine Billion Dollar (2023) importieren" in html
+    assert "S01E01" in html and "S01E02" in html
+    assert all(source.name in html for source in sources)
+    assert unrelated.name not in html
     assert options.choices[0].imdb_url == "https://www.imdb.com/title/tt26456880/"
     selected = importer.select_series(
         options.source_path, options.signature, options.choices[0].key
@@ -318,6 +327,45 @@ def test_source_change_after_choice_stops_selected_run_before_moving(tmp_path) -
         importer.run(Library([]), force=True, selection=selected)
     assert all(source.exists() for source in sources)
     assert not list(config.shows_dir.iterdir())
+
+
+@pytest.mark.parametrize("phase", ["confirmation", "run"])
+@pytest.mark.parametrize("change", ["added", "removed", "modified"])
+def test_changed_preview_scope_blocks_before_any_move(tmp_path, phase, change) -> None:
+    config, _, importer, jellyfin, sources, _ = _prepare(tmp_path)
+    options = importer.selection_options(sources[0].name)
+    selected = None
+    if phase == "run":
+        selected = importer.select_series(
+            options.source_path, options.signature, options.choices[0].key
+        )
+    retained = sources[:]
+    if change == "added":
+        retained.append(release_folder(config.income_dir, "Eine.Billion.Dollar.S01E03.German"))
+    elif change == "removed":
+        retained[1] = sources[1].rename(tmp_path / "retained-source")
+    else:
+        next(sources[1].glob("*.mkv")).write_bytes(b"changed second source")
+
+    with pytest.raises(SelectionUnavailable, match="Importumfang"):
+        if phase == "confirmation":
+            importer.select_series(options.source_path, options.signature, options.choices[0].key)
+        else:
+            importer.run(Library([]), force=True, selection=selected)
+
+    assert all(source.exists() for source in retained)
+    assert not list(config.shows_dir.iterdir())
+    assert jellyfin.refresh_calls == 0
+
+
+def test_unrelated_new_source_does_not_change_confirmed_scope(tmp_path) -> None:
+    config, _, importer, _, sources, unrelated = _prepare(tmp_path)
+    options = importer.selection_options(sources[0].name)
+    other = release_folder(config.income_dir, "Another.Show.S01E01.German")
+    selected = importer.select_series(options.source_path, options.signature, options.choices[0].key)
+    assert importer.run(Library([]), force=True, selection=selected).transferred == 2
+    assert all(not source.exists() for source in sources)
+    assert other.exists() and unrelated.exists()
 
 
 def test_choice_without_imdb_link_remains_selectable_and_conflicts_block(tmp_path) -> None:

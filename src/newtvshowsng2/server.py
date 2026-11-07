@@ -4,6 +4,7 @@ import json
 import logging
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -11,7 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 from .images import SeriesImageCache, placeholder_image
 from .jellyfin import JellyfinError
 from .media_importer import SelectionUnavailable
-from .rendering import LogRenderer
+from .rendering import LogRenderer, Renderer
 from .scanner import Scanner
 from .storage import AnnouncementUnavailable, Storage
 
@@ -42,6 +43,50 @@ class ApplicationServer(ThreadingHTTPServer):
 
 class RequestHandler(BaseHTTPRequestHandler):
     server: ApplicationServer
+
+    def send_error(
+        self, code: int, message: str | None = None, explain: str | None = None,
+    ) -> None:
+        path = getattr(self, "path", "").split("?", 1)[0]
+        if path not in (
+            "/", "/index.html", "/log", "/log/", "/log/raw", "/media-import/resolve",
+            "/run/feed", "/run/import", "/run/income-scan", "/run/import/resolve",
+            "/announcements/complete", "/announcements/reopen",
+        ):
+            super().send_error(code, message, explain)
+            return
+        if path in ("/log", "/log/", "/log/raw"):
+            return_url, return_label = "/log", "Zurück zum Log"
+        elif path == "/announcements/reopen":
+            return_url, return_label = "/#history", "Zurück zur Historie"
+        elif path in ("/", "/index.html", "/run/feed", "/announcements/complete"):
+            return_url, return_label = "/#overview", "Zurück zum Feed"
+        else:
+            return_url, return_label = "/#media-import", "Zurück zum Medienimport"
+        title = {
+            400: "Angaben konnten nicht verarbeitet werden",
+            403: "Anfrage wurde abgelehnt",
+            404: "Funktion ist nicht verfügbar",
+            409: "Vorgang kann derzeit nicht ausgeführt werden",
+            503: "Dienst ist derzeit nicht verfügbar",
+        }.get(code, "Vorgang ist fehlgeschlagen")
+        content = Renderer.render_error(
+            title, message or title, return_url, return_label,
+        ).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; "
+            "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+        )
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(content)
 
     def do_POST(self) -> None:
         if self.path not in (
@@ -189,8 +234,12 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._serve_index()
         elif path in ("/log", "/log/"):
             self._serve_log()
+        elif path == "/log/raw":
+            self._serve_raw_log()
         elif path in ("/favicon.svg", "/favicon.ico"):
             self._serve_favicon()
+        elif path == "/ui.js":
+            self._serve_ui_script()
         elif path in ("/series-image", "/series-placeholder.svg"):
             self._serve_series_image(path)
         elif path == "/healthz":
@@ -276,7 +325,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header(
             "Content-Security-Policy",
             "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; "
-            "form-action 'self'; frame-ancestors 'none'",
+            "script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'",
         )
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "same-origin")
@@ -304,6 +353,27 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
+    def _serve_raw_log(self) -> None:
+        try:
+            content = self.server.log_renderer.log_path.read_bytes()
+        except FileNotFoundError:
+            self.send_error(HTTPStatus.NOT_FOUND, "Die aktuelle Logdatei ist noch nicht vorhanden")
+            return
+        except OSError:
+            LOGGER.exception("Raw-Log konnte nicht gelesen werden")
+            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Die aktuelle Logdatei konnte nicht gelesen werden")
+            return
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Content-Disposition", "inline")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", "default-src 'none'; img-src 'self'; frame-ancestors 'none'; sandbox")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        self.wfile.write(content)
+
     def _serve_favicon(self) -> None:
         favicon_path = self.server.output_path.with_name("favicon.svg")
         try:
@@ -315,6 +385,16 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "image/svg+xml")
         self.send_header("Content-Length", str(len(content)))
         self.send_header("Cache-Control", "public, max-age=86400")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(content)
+
+    def _serve_ui_script(self) -> None:
+        content = files("newtvshowsng2").joinpath("static/ui.js").read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/javascript; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(content)

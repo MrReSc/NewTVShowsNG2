@@ -7,75 +7,60 @@
   <meta name="theme-color" content="#121212">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <title>Log · NewTVShowsNG2</title>
+  {% include "_theme.html" %}
   <style>
-    :root { color-scheme: dark; --background: #121212; --surface: #191919; --border: #303030; --text: #d7d9dc; --muted: #a0a5ab; --accent: #8fa6b8; --link: #a6b9c9; --visited: #b3a6bd; --control: #2b3036; --control-hover: #353c44; --control-border: #626d79; --control-text: #d7dde3; }
-    * { box-sizing: border-box; }
-    html { min-height: 100%; background: var(--background); }
-    body { min-height: 100vh; margin: 0; color: var(--text); background: var(--background); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.5; }
-    a { color: var(--link); text-underline-offset: 3px; }
-    a:visited { color: var(--visited); }
     a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-    .shell { width: min(1320px, calc(100% - 48px)); margin: 0 auto; padding: 28px 0 52px; }
-    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 25px; border-bottom: 1px solid var(--border); }
-    .brand { display: inline-flex; align-items: center; gap: 11px; color: var(--text); font-weight: 800; letter-spacing: -.035em; text-decoration: none; }
-    .brand:visited { color: var(--text); }
-    .brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 5px; background: #1e1e1e; color: var(--text); font-size: 1rem; font-weight: 900; }
-    .meta { color: var(--muted); font-size: .8rem; text-align: right; }
-    .nav { position: sticky; z-index: 5; top: 0; display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; padding: 12px 0; border-bottom: 1px solid var(--border); background: #121212f2; backdrop-filter: blur(14px); }
-    .nav a { padding: 9px 13px; border: 1px solid #292929; border-radius: 5px; background: #101010; color: var(--muted); font: .82rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-decoration: none; }
-    .nav a:hover { color: var(--text); background: #222; }
-    .nav a[aria-current="page"] { border-color: #46515d; background: #242c33; color: var(--text); box-shadow: inset 0 -2px var(--accent); }
-    .heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
-    .heading h1 { margin: 0; font-size: 1.35rem; font-weight: 650; }
+    .heading { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 12px 18px; margin-bottom: 18px; }
+    .heading h1 { margin: 0; }
     .hint { margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
-    .refresh { flex: 0 0 auto; }
+    .log-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .raw-link { padding: 8px 10px; color: var(--muted); font-size: .875rem; text-underline-offset: 3px; }
+    .raw-link:visited { color: var(--muted); }
+    .raw-link:hover { color: var(--text); }
     .filters { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
     .filters label { display: grid; gap: 5px; color: var(--muted); font-size: .8rem; }
     .filters select, .filters input { min-height: 39px; padding: 8px 10px; border: 1px solid #505050; border-radius: 5px; background: #101010; color: var(--text); font: inherit; font-size: .9rem; }
     .filters .search { flex: 1 1 220px; }
     .filters input { width: 100%; }
-    .button { display: inline-flex; align-items: center; justify-content: center; min-height: 39px; padding: 8px 13px; border: 1px solid var(--control-border); border-radius: 4px; background: var(--control); color: var(--control-text); box-shadow: 0 1px 2px #0005; font: 600 .85rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-decoration: none; cursor: pointer; }
-    .button:visited { color: var(--control-text); }
-    .button:hover { background: var(--control-hover); }
-    .button:active { background: #242c33; box-shadow: none; }
     .button.reset { background: #202020; }
     .button.reset:hover { background: #2a2a2a; }
     .result-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 18px; margin: 0 0 10px; color: var(--muted); font-size: .82rem; }
     .entries { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-    .entry { display: grid; grid-template-columns: 210px 82px minmax(0, 1fr); gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
+    .entry { display: grid; grid-template-columns: 210px 82px minmax(0, 1fr); gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
     .entry:last-child { border-bottom: 0; }
-    .time { color: var(--muted); font: .83rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .level { align-self: start; width: fit-content; padding: 2px 6px; border: 1px solid transparent; border-radius: 999px; background: #25292d; color: var(--muted); font: 600 .72rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .level.warning { background: #2e2a22; color: #b8aa8c; }
-    .level.error, .level.critical { background: #302523; color: #c09c98; }
+    .time { color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+    .level { align-self: start; width: fit-content; padding: 2px 6px; border: 1px solid transparent; border-radius: var(--radius-badge); background: #292929; color: var(--muted); font: 600 .72rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .level.warning { background: var(--warning-soft); color: var(--warning); }
+    .level.error, .level.critical { background: var(--danger-soft); color: var(--danger); }
     .body { min-width: 0; }
-    .message { margin: 0; font: .92rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .message { margin: 0; font-size: .9375rem; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
     .source { display: block; margin-top: 4px; color: var(--muted); font-size: .76rem; overflow-wrap: anywhere; }
     details { margin-top: 8px; }
-    summary { width: fit-content; color: var(--link); cursor: pointer; font-size: .82rem; }
-    .traceback { max-height: 400px; margin: 8px 0 0; padding: 12px; overflow: auto; border: 1px solid var(--border); border-radius: 5px; background: #101010; font: .8rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; }
+    summary { width: fit-content; min-height: 28px; padding: 4px 0; color: var(--link); cursor: pointer; font-size: .8125rem; }
+    .log-text { max-height: 400px; margin: 8px 0 0; padding: 12px; overflow: auto; border: 1px solid var(--border); border-radius: 5px; background: #101010; color: var(--text); font: .8125rem/1.55 var(--font-data); white-space: pre; tab-size: 4; }
     .empty { padding: 38px 16px; color: var(--muted); text-align: center; }
     .pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; font-size: .85rem; }
     @media (max-width: 800px) { .entry { grid-template-columns: auto 1fr; gap: 5px 10px; } .body { grid-column: 1 / -1; } }
-    @media (max-width: 760px) { .shell { width: min(100% - 24px, 680px); padding-top: 16px; } .topbar, .heading { align-items: flex-start; } }
-    @media (max-width: 470px) { .brand { font-size: .9rem; } .nav a { padding: 8px 10px; font-size: .78rem; } .topbar { flex-wrap: wrap; } .meta { text-align: left; } }
+    @media (max-width: 760px) { .shell { width: min(100% - 24px, 680px); padding-top: 16px; } .heading { align-items: flex-start; } }
   </style>
 </head>
 <body>
   <main class="shell">
     <header class="topbar">
       <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">N</span>NewTVShowsNG2</a>
-      <span class="meta">Stand: {{ generated_at }}<br>Aktualisierung nur auf Anfrage</span>
+      <nav class="nav" aria-label="Ansichten">
+        <a href="/#overview">Feed</a>
+        <a href="/#media-import">Medienimport</a>
+        <a href="/#history">Historie</a>
+        <a href="/log" aria-current="page">Log</a>
+      </nav>
     </header>
-    <nav class="nav" aria-label="Ansichten">
-      <a href="/#overview">Feed</a>
-      <a href="/#media-import">Medienimport</a>
-      <a href="/#history">Historie</a>
-      <a href="/log" aria-current="page">Log</a>
-    </nav>
     <div class="heading">
       <div><h1>Diagnoselog</h1><p class="hint">Neueste Meldungen zuerst</p></div>
-      <a class="button refresh" href="{{ refresh_url }}">Aktualisieren</a>
+      <div class="log-actions">
+        <a class="raw-link" href="/log/raw" target="_blank" rel="noopener noreferrer">Raw-Log öffnen</a>
+        <a class="button refresh" href="{{ refresh_url }}">Aktualisieren</a>
+      </div>
     </div>
     <form class="filters" method="get" action="/log">
       <label>Zeitraum
@@ -112,7 +97,7 @@
         <div class="body">
           <p class="message">{{ entry.message }}</p>
           <span class="source">{{ entry.source }}</span>
-          {% if entry.details %}<details><summary>Details / Traceback anzeigen</summary><pre class="traceback">{{ entry.details }}</pre></details>{% endif %}
+          {% if entry.raw_text %}<details><summary>Original anzeigen</summary><pre class="log-text" tabindex="0" role="region" aria-label="Originaltext des Logeintrags">{{ entry.raw_text }}</pre></details>{% endif %}
         </div>
       </li>
       {% endfor %}

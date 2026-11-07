@@ -47,7 +47,7 @@ def test_deleted_s05_variants_and_episodes_follow_fresh_jellyfin_status(tmp_path
             assert row["jellyfin_expected_episode_count"] is None
     html = cfg.output_path.read_text()
     assert "0 / 10 vorhanden" in html
-    assert "9 / 10 gesehen" in html
+    assert "9 / 10 gesehen" not in html
     assert "Noch benötigt: E10" in html
     assert ">Gesehen</span>" in html
     assert "In Jellyfin" not in html

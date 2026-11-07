@@ -5,57 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#121212">
-  {% if (state.get('scan_origin') == 'manual' and state.get('scan_status') == 'running') or state.get('manual_import_status') == 'running' %}
-  <meta http-equiv="refresh" content="3">
-  {% endif %}
+  <script src="/ui.js" defer></script>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <title>NewTVShowsNG2</title>
+  {% include "_theme.html" %}
   <style>
-    :root {
-      color-scheme: dark;
-      --background: #121212;
-      --surface: #191919;
-      --surface-hover: #222222;
-      --border: #303030;
-      --text: #d7d9dc;
-      --muted: #a0a5ab;
-      --accent: #8fa6b8;
-      --accent-soft: #242c33;
-      --link: #a6b9c9;
-      --visited: #b3a6bd;
-      --success: #9bab9d;
-      --success-soft: #222b25;
-      --warning: #b8aa8c;
-      --warning-soft: #2e2a22;
-      --danger: #c09c98;
-      --danger-soft: #302523;
-      --control: #2b3036;
-      --control-hover: #353c44;
-      --control-border: #626d79;
-      --control-text: #d7dde3;
-      --radius: 8px;
-    }
 
-    * { box-sizing: border-box; }
-    html { min-height: 100%; background: var(--background); }
-    body {
-      min-height: 100vh; margin: 0; color: var(--text);
-      background: var(--background);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      line-height: 1.5;
-    }
-    a { color: var(--link); text-underline-offset: 3px; }
-    a:visited { color: var(--visited); }
-    a:hover { color: var(--text); }
-    a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
-
-    .shell { width: min(1320px, calc(100% - 48px)); margin: 0 auto; padding: 28px 0 52px; }
-    .topbar {
-      padding-bottom: 25px; border-bottom: 1px solid var(--border);
-    }
-    .brand { display: inline-flex; align-items: center; gap: 11px; color: var(--text); font-weight: 800; letter-spacing: -.035em; text-decoration: none; }
-    .brand:visited { color: var(--text); }
-    .brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 5px; background: #1e1e1e; color: var(--text); font-size: 1rem; font-weight: 900; }
     .scan-state { display: inline-flex; align-items: center; gap: 8px; color: var(--text); white-space: nowrap; }
     .scan-state::before { width: 8px; height: 8px; border-radius: 50%; background: var(--success); content: ""; }
     .scan-state.warning::before { background: var(--warning); }
@@ -63,18 +18,16 @@
     .scan-state.running::before { background: var(--accent); }
     .next-run { white-space: nowrap; }
 
-    .nav { position: sticky; z-index: 5; top: 0; display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; padding: 12px 0; border-bottom: 1px solid var(--border); background: #121212f2; backdrop-filter: blur(14px); }
-    .nav a { padding: 9px 13px; border: 1px solid #292929; border-radius: 5px; background: #101010; color: var(--muted); font: .82rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-decoration: none; }
-    .nav a:hover { color: var(--text); background: var(--surface-hover); }
-    .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: -6px 0 22px; }
+    .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 0 24px; }
     .actions form { margin: 0; }
-    .actions button { padding: 9px 13px; border: 1px solid var(--control-border); border-radius: 4px; background: var(--control); color: var(--control-text); box-shadow: 0 1px 2px #0005; font: 600 .82rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; cursor: pointer; }
-    .actions button:hover { background: var(--control-hover); }
-    .actions button:active { background: var(--accent-soft); box-shadow: none; }
     .actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-    .action-status { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px 18px; margin-left: auto; color: var(--muted); font-size: .78rem; text-align: right; }
+    [hidden] { display: none !important; }
+    .run-feedback p { margin: 0 0 8px; }
+    .run-feedback form { margin: 0; }
+    .run-feedback button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .action-status { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px 18px; margin-left: auto; color: var(--muted); font-size: .8125rem; text-align: right; }
     .history-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin: -6px 0 18px; padding: 0; border: 0; }
-    .history-filters legend { margin-bottom: 7px; color: var(--muted); font-size: .78rem; }
+    .history-filters legend { margin-bottom: 7px; color: var(--muted); font-size: .8125rem; }
     .history-filters label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: .85rem; }
     .history-filters input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); }
     .history-filter-empty { display: none; }
@@ -84,12 +37,13 @@
     #history-view:has(#history-filter-feed:not(:checked)):has(#history-filter-import:not(:checked)) .history-filter-empty { display: block; }
     .nav a[href="#overview"],
     body:has(#history:target) .nav a[href="#history"],
-    body:has(#media-import:target) .nav a[href="#media-import"] { border-color: #46515d; background: var(--accent-soft); color: var(--text); box-shadow: inset 0 -2px var(--accent); }
+    body:has(#media-import:target) .nav a[href="#media-import"] { background: transparent; color: var(--text); box-shadow: inset 0 -2px var(--accent); }
     body:has(#history:target) .nav a[href="#overview"],
-    body:has(#media-import:target) .nav a[href="#overview"] { border-color: #292929; background: #101010; color: var(--muted); box-shadow: none; }
+    body:has(#media-import:target) .nav a[href="#overview"] { background: transparent; color: var(--muted); box-shadow: none; }
 
-    .alert { margin: 0 0 18px; padding: 13px 16px; border: 1px solid #514b3e; border-radius: 11px; background: var(--warning-soft); color: var(--warning); }
-    .alert.error { border-color: #57423f; background: var(--danger-soft); color: var(--danger); }
+    .alert { margin: 0 0 18px; padding: 18px 20px; border: 1px solid #63513a; border-radius: 8px; background: var(--warning-soft); color: var(--warning); }
+    .alert.error { border-color: #704d47; background: var(--danger-soft); color: var(--danger); }
+    .alert.run-feedback { border-color: #585858; background: var(--accent-soft); color: var(--text); }
     .alert strong { display: block; margin-bottom: 2px; }
     .alert.details { white-space: pre-line; }
     .alert ul { margin: 6px 0 0; padding-left: 20px; }
@@ -100,26 +54,27 @@
     body:has(#media-import:target) #overview-view { display: none; }
     body:has(#history:target) #history-view,
     body:has(#media-import:target) #media-import-view { display: block; }
-    .section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
-    .section-heading h1 { margin: 0; font: 400 1.25rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: -.03em; }
-    .count { flex: 0 0 auto; padding: 5px 9px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font: .73rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
+    .section-heading h1 { margin: 0; }
+    .count { flex: 0 0 auto; color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
     .panel { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
-    .panel.current { border-color: #3b4249; }
+    .panel.current { border-color: #414141; }
     .table-wrap { overflow-x: auto; scrollbar-color: var(--border) var(--surface); }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th, td { padding: 16px 17px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
-    th { background: #151515; color: var(--muted); font: .68rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+    th, td { padding: 18px 20px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { background: transparent; color: var(--muted); font-size: .8125rem; font-weight: 500; letter-spacing: .01em; }
     tbody tr:last-child td { border-bottom: 0; }
     tbody tr:hover { background: var(--surface-hover); }
-    .release { width: 46%; overflow-wrap: anywhere; font-size: .9rem; font-weight: 650; }
+    .release { width: 46%; overflow-wrap: anywhere; font-size: .9375rem; font-weight: 600; }
     .release a { color: var(--link); }
     .release a:visited { color: var(--visited); }
     .release-title { display: block; }
-    .release-table tbody td { padding-top: 15px; padding-bottom: 15px; }
+    .release-content .release-title { max-height: 2.8em; overflow: auto; scrollbar-width: thin; }
+    .release-table tbody td { padding-top: 18px; padding-bottom: 18px; }
     .release-table tbody tr:last-child td { border-bottom: 1px solid transparent; }
     .release-table .cell-content { height: 90px; overflow: auto; scrollbar-width: thin; }
-    .release-table .inventory .cell-content { font-size: .9rem; line-height: 1.4; }
-    .release-layout { display: flex; align-items: flex-start; gap: 12px; height: 90px; }
+    .release-table .inventory .cell-content { font-size: .9375rem; line-height: 1.5; }
+    .release-layout { display: flex; align-items: flex-start; gap: 14px; height: 90px; }
     .series-poster { flex: 0 0 56px; width: 56px; height: 84px; object-fit: cover; border-radius: 4px; background: #252525; }
     .release-content { flex: 1; min-width: 0; max-height: 90px; overflow: auto; scrollbar-width: thin; line-height: 1.4; }
     .release-table .variant-links { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 3px; scrollbar-width: thin; }
@@ -128,28 +83,28 @@
     .release-table .badge-row { min-height: 0; overflow: auto; scrollbar-width: thin; }
     .release-table .complete-action { flex: 0 0 auto; margin-top: 0; }
     .variant-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .variant-links a { padding: 3px 9px; border: 1px solid #48535f; border-radius: 4px; background: #20272d; color: var(--link); font-size: .73rem; font-weight: 600; text-decoration: none; }
-    .variant-links a:visited { color: var(--visited); border-color: #625b69; }
+    /* Ein deckender Grund erlaubt auch Firefox die Hintergrundfarbe besuchter Links. */
+    .variant-links a { padding: 3px 9px; border: 1px solid #4b4b4b; border-radius: 4px; background: var(--surface); color: var(--link); font-size: .75rem; font-weight: 500; text-decoration: none; }
+    .variant-links a:visited { color: #161616; background-color: #c5c5c5; border-color: #c5c5c5; }
     .variant-links a:hover { background: var(--control-hover); text-decoration: underline; }
-    .type-marker { display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; color: var(--muted); font-size: .7rem; font-weight: 750; }
+    .variant-links a:visited:hover { color: #121212; background-color: #dedede; border-color: #dedede; }
+    .type-marker { display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; color: var(--muted); font-size: .75rem; font-weight: 500; }
     .type-marker svg { width: 14px; height: 14px; flex: 0 0 auto; }
     .inventory { width: 20%; white-space: nowrap; }
-    .inventory small { display: block; margin-top: 2px; color: var(--muted); }
+    .inventory small { display: block; margin-top: 4px; color: var(--muted); font-size: .8125rem; }
+    #media-import-view .inventory { white-space: normal; overflow-wrap: anywhere; }
     .history-import .inventory { white-space: normal; overflow-wrap: anywhere; }
     .status-col { width: 14%; }
-    .date-col { width: 20%; color: var(--muted); }
+    .date-col { width: 20%; color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
     .badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
     .complete-action { margin: 10px 0 0; }
-    .complete-action button { padding: 5px 9px; border: 1px solid var(--control-border); border-radius: 4px; background: var(--control); color: var(--control-text); box-shadow: 0 1px 2px #0005; font: inherit; font-size: .75rem; cursor: pointer; }
-    .complete-action button:hover { background: var(--control-hover); }
-    .complete-action button:active { background: var(--accent-soft); box-shadow: none; }
     .complete-action button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-    .badge { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border: 1px solid transparent; border-radius: 999px; font-size: .7rem; font-weight: 650; line-height: 1.2; }
+    .badge { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border: 1px solid transparent; border-radius: var(--radius-badge); font-size: .75rem; font-weight: 500; line-height: 1.2; }
     .badge.new { background: var(--accent-soft); color: var(--link); }
     .badge.open, .badge.warning { background: var(--warning-soft); color: var(--warning); }
     .badge.done { background: var(--success-soft); color: var(--success); }
     .badge.blocked { background: var(--danger-soft); color: var(--danger); }
-    .import-target { display: block; margin-top: 5px; color: var(--muted); font-size: .78rem; font-weight: 400; }
+    .import-target { display: block; margin-top: 5px; color: var(--muted); font-size: .8125rem; font-weight: 400; }
     .empty { padding: 48px 20px; text-align: center; }
     .empty strong { display: block; margin-bottom: 4px; }
     .empty span { color: var(--muted); }
@@ -164,7 +119,7 @@
       thead { position: absolute; width: 1px !important; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
       tbody { display: grid; gap: 10px; }
       tr { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-      .current tr { border-color: #3b4249; }
+      .current tr { border-color: #414141; }
       td { display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 10px; padding: 6px 0; border: 0; white-space: normal; }
       td::before { color: var(--muted); content: attr(data-label); font-size: .68rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
       td.release { display: block; padding: 0 0 10px; font-size: .94rem; }
@@ -183,10 +138,8 @@
       .release-table .date-col .cell-content { height: 24px; }
     }
     @media (max-width: 470px) {
-      .brand { font-size: .9rem; }
       .next-run { white-space: normal; }
       .action-status { width: 100%; justify-content: flex-start; margin-left: 0; text-align: left; }
-      .nav a { padding: 8px 10px; font-size: .78rem; }
       td { grid-template-columns: 88px minmax(0, 1fr); }
     }
   </style>
@@ -195,6 +148,7 @@
   <main class="shell">
     {% set scan_status = state.get('scan_status', 'starting') %}
     {% set import_status = state.get('manual_import_status') %}
+    {% set busy = scan_status == 'running' or import_status == 'running' %}
     {% macro feed_state() %}
       <span class="scan-state {{ scan_status }}">
         {% if scan_status == 'running' %}Scan läuft
@@ -206,13 +160,13 @@
     {% endmacro %}
     <header class="topbar">
       <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">N</span>NewTVShowsNG2</a>
+      <nav class="nav" aria-label="Ansichten">
+        <a href="#overview">Feed</a>
+        <a href="#media-import">Medienimport</a>
+        <a href="#history">Historie</a>
+        <a href="/log">Log</a>
+      </nav>
     </header>
-    <nav class="nav" aria-label="Ansichten">
-      <a href="#overview">Feed</a>
-      <a href="#media-import">Medienimport</a>
-      <a href="#history">Historie</a>
-      <a href="/log">Log</a>
-    </nav>
     <span class="tab-anchor" id="overview" aria-hidden="true"></span>
     <span class="tab-anchor" id="history" aria-hidden="true"></span>
     <span class="tab-anchor" id="media-import" aria-hidden="true"></span>
@@ -226,9 +180,9 @@
       </div>
       {% if media_import_enabled %}
         <div class="actions" aria-label="Medienimport-Aktionen">
-          <form method="post" action="/run/income-scan"><button type="submit">Download jetzt scannen</button></form>
-          <form method="post" action="/run/import"><button type="submit">Dateien jetzt einsortieren</button></form>
-          <div class="action-status">
+          <form method="post" action="/run/income-scan"><button type="submit" data-run-start {% if busy %}disabled{% endif %}>Download jetzt scannen</button></form>
+          <form method="post" action="/run/import"><button type="submit" data-run-start {% if busy %}disabled{% endif %}>Dateien jetzt einsortieren</button></form>
+          <div class="action-status" data-live-status="import">
             {% if import_status == 'running' %}<span class="scan-state running">Import läuft</span>
             {% elif state.get('automatic_import_error') %}<span class="scan-state error">Automatischer Import fehlgeschlagen</span>
             {% elif import_status == 'error' %}<span class="scan-state error">Letzter manueller Import fehlgeschlagen</span>
@@ -237,12 +191,11 @@
           </div>
         </div>
       {% endif %}
-      {% if import_status == 'running' %}
-        <div class="alert" role="status">
-          <strong>Manuelles Einsortieren läuft</strong>
-          Die Seite wird nach dem Abschluss automatisch aktualisiert.
-        </div>
-      {% endif %}
+      <div class="alert run-feedback" role="status" data-run-feedback="import" data-running="{{ 'true' if import_status == 'running' else 'false' }}" {% if import_status != 'running' %}hidden{% endif %}>
+        <p data-run-message>Manuelles Einsortieren läuft. Der Status wird im Hintergrund aktualisiert. Neue Ergebnisse kannst du nach dem Abschluss laden.</p>
+        <form method="get" action="/#media-import"><button type="submit">Ansicht aktualisieren</button></form>
+        <noscript>JavaScript ist deaktiviert. Lade den aktuellen Stand mit «Ansicht aktualisieren».</noscript>
+      </div>
       {% if state.get('automatic_import_error') %}
         <div class="alert error details" role="alert">
           <strong>Automatischer Medienimport mit Fehlern</strong>
@@ -274,8 +227,10 @@
                       {% if item.target_path %}<small class="import-target">→ {{ item.target_path }}</small>{% endif %}
                     </td>
                     <td class="inventory" data-label="Episode">
+                      <div>
                       {% if item.season is not none and item.episode is not none %}S{{ "%02d" | format(item.season) }}E{{ "%02d" | format(item.episode) }}{% else %}–{% endif %}
                       {% if item.parsed_title %}<small>{{ item.parsed_title }}</small>{% endif %}
+                      </div>
                     </td>
                     <td class="status-col" data-label="Status">
                       {% if item.status == 'needs_selection' %}<span class="badge blocked">Serienzuordnung wählen</span>
@@ -283,10 +238,12 @@
                       {% else %}<span class="badge warning">Wartet</span>{% endif %}
                     </td>
                     <td class="date-col" data-label="Details">
+                      <div>
                       {{ item.reason or 'Wartet auf Importprüfung' }}
                       {% if media_import_enabled and item.status == 'needs_selection' %}
                         <br><a href="/media-import/resolve?source={{ item.source_path | urlencode }}">Serie zuordnen</a>
                       {% endif %}
+                      </div>
                     </td>
                   </tr>
                 {% endfor %}
@@ -357,11 +314,16 @@
                     <td class="inventory" data-label="{% if current_panel %}Bestand{% else %}Bestand / Ziel{% endif %}">
                       <div class="cell-content" tabindex="0">
                       {{ row.jellyfin_episode_count or 0 }} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %} vorhanden
-                      <small>{% if row.jellyfin_played_episode_count is not none %}{{ row.jellyfin_played_episode_count }}{% else %}?{% endif %} / {% if row.jellyfin_expected_episode_count is not none %}{{ row.jellyfin_expected_episode_count }}{% else %}?{% endif %} gesehen</small>
-                      <small>Episoden in S{{ "%02d" | format(row.season) }}</small>
-                      {% if not row.completed_at and row.needed_episodes %}
-                        <small>Noch benötigt: {% for number in row.needed_episodes %}E{{ "%02d" | format(number) }}{% if not loop.last %}, {% endif %}{% endfor %}</small>
-                      {% elif not row.completed_at and row.is_current and row.episode is none %}
+                      {% if current_panel and row.needed_episodes %}
+                        <small title="Benötigte Episoden: {% for number in row.needed_episodes %}E{{ '%02d' | format(number) }}{% if not loop.last %}, {% endif %}{% endfor %}">{{ row.needed_episodes | length }} {% if row.needed_episodes | length == 1 %}Folge fehlt{% else %}Folgen fehlen{% endif %}</small>
+                      {% endif %}
+                      {% if not current_panel %}
+                        <small>Episoden in S{{ "%02d" | format(row.season) }}</small>
+                        {% if not row.completed_at and row.needed_episodes %}
+                          <small>Noch benötigt: {% for number in row.needed_episodes %}E{{ "%02d" | format(number) }}{% if not loop.last %}, {% endif %}{% endfor %}</small>
+                        {% endif %}
+                      {% endif %}
+                      {% if not row.completed_at and row.is_current and row.episode is none and not row.needed_episodes %}
                         <small>Sollbestand unbekannt</small>
                       {% endif %}
                       </div>
@@ -413,8 +375,8 @@
         <span class="count">{{ current | length }} Einträge</span>
       </div>
       <div class="actions" aria-label="Feed-Aktionen">
-        <form method="post" action="/run/feed"><button type="submit">Feed jetzt abgleichen</button></form>
-        <div class="action-status">
+        <form method="post" action="/run/feed"><button type="submit" data-run-start {% if busy %}disabled{% endif %}>Feed jetzt abgleichen</button></form>
+        <div class="action-status" data-live-status="feed-overview">
           {{ feed_state() }}
           <span class="next-run">Nächster Lauf: {{ state.get('next_run_at') | local_datetime }}</span>
         </div>
@@ -425,12 +387,11 @@
           {{ state.get('last_error') }} Die zuletzt gespeicherten Ergebnisse bleiben sichtbar.
         </div>
       {% endif %}
-      {% if state.get('scan_origin') == 'manual' and scan_status == 'running' %}
-        <div class="alert" role="status">
-          <strong>Feed-Abgleich läuft</strong>
-          Die Seite wird nach dem Abschluss automatisch aktualisiert.
-        </div>
-      {% endif %}
+      <div class="alert run-feedback" role="status" data-run-feedback="feed" data-running="{{ 'true' if scan_status == 'running' else 'false' }}" {% if scan_status != 'running' %}hidden{% endif %}>
+        <p data-run-message>Feed-Abgleich läuft. Der Status wird im Hintergrund aktualisiert. Neue Ergebnisse kannst du nach dem Abschluss laden.</p>
+        <form method="get" action="/#overview"><button type="submit">Ansicht aktualisieren</button></form>
+        <noscript>JavaScript ist deaktiviert. Lade den aktuellen Stand mit «Ansicht aktualisieren».</noscript>
+      </div>
       <div class="panel current">{{ release_table(current, true) }}</div>
     </section>
 
@@ -442,10 +403,14 @@
         <span class="count">{{ history | length }} Einträge gesamt</span>
       </div>
       <div class="actions" aria-label="Feed-Status">
-        <div class="action-status">
+        <div class="action-status" data-live-status="feed-history">
           {{ feed_state() }}
           <span class="next-run">Nächster Lauf: {{ state.get('next_run_at') | local_datetime }}</span>
         </div>
+      </div>
+      <div class="alert run-feedback" role="status" data-results-available hidden>
+        <p>Der Lauf ist beendet. Lade die neuen Ergebnisse mit «Ansicht aktualisieren».</p>
+        <form method="get" action="/#history"><button type="submit">Ansicht aktualisieren</button></form>
       </div>
       {% if history %}
       <fieldset class="history-filters">

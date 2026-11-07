@@ -29,7 +29,7 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-newtvshowsng2 = ["templates/*.html", "static/*.svg"]
+newtvshowsng2 = ["templates/*.html", "static/*.svg", "static/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

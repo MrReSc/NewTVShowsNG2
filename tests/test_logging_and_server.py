@@ -3,6 +3,9 @@ from __future__ import annotations
 import http.client
 import logging
 import threading
+from html import unescape
+from pathlib import Path
+from urllib.parse import urlencode
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
@@ -12,6 +15,8 @@ from newtvshowsng2.logging_utils import configure_logging, read_log_entries
 from newtvshowsng2.rendering import LogRenderer, Renderer
 from newtvshowsng2.server import ApplicationServer
 from newtvshowsng2.storage import Storage
+from newtvshowsng2.jellyfin import JellyfinError
+from newtvshowsng2.media_importer import SelectionUnavailable
 
 
 def test_configured_log_file_rotates(tmp_path, monkeypatch) -> None:
@@ -64,13 +69,23 @@ def test_log_renderer_groups_tracebacks_and_escapes_content(tmp_path) -> None:
     assert len(entries) == 2
     assert entries[0].timestamp == datetime(2026, 9, 29, 15, tzinfo=ZoneInfo("Europe/Zurich")).replace(microsecond=123000)
     assert "Traceback" in entries[1].details
+    assert entries[0].raw_text == "2026-09-29 15:00:00,123 INFO newtvshowsng2.scanner: Alter Eintrag\n"
+    assert entries[1].raw_text == (
+        "2026-09-30T11:00:00+00:00 ERROR newtvshowsng2.scanner: <script>alert(1)</script>\n"
+        "Traceback (most recent call last):\n"
+        "  File \"scan.py\", line 1, in run\n"
+        "ValueError: kaputt\n"
+    )
 
     html = LogRenderer(log_path, "Europe/Zurich").render(now=now)
 
     assert "Alter Eintrag" in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert "<script>alert(1)</script>" not in html
-    assert '<details><summary>Details / Traceback anzeigen</summary>' in html
+    assert html.count('<details><summary>Original anzeigen</summary>') == 2
+    original = html.split('aria-label="Originaltext des Logeintrags">', 1)[1].split("</pre>", 1)[0]
+    assert unescape(original) == entries[1].raw_text
+    assert 'href="/log/raw" target="_blank" rel="noopener noreferrer"' in html
     assert 'http-equiv="refresh"' not in html
     assert "Aktualisieren" in html
     assert '<a class="button reset" href="/log">Zurücksetzen</a>' in html
@@ -83,6 +98,27 @@ def test_log_renderer_groups_tracebacks_and_escapes_content(tmp_path) -> None:
         < nav.index(">Historie</a>")
         < nav.index(">Log</a>")
     )
+
+
+def test_log_originals_preserve_file_text_and_separate_rotation_boundaries(tmp_path) -> None:
+    log_path = tmp_path / "app.log"
+    archived = "2026-09-29T12:00:00Z INFO app: Rotierter Eintrag\n  Zusatz\n\n"
+    prefix = "Unformatierter Beginn\r\n\t  Fortsetzung\r\n"
+    current = (
+        "2026-09-30 12:34:56,123 ERROR app: Grüsse <tag>\r\n"
+        "\r\n\tTraceback mit Einrückung\r\n"
+        "Letzte Zeile ohne Zeilenumbruch"
+    )
+    log_path.with_name("app.log.1").write_bytes(archived.encode("utf-8"))
+    log_path.write_bytes((prefix + current).encode("utf-8"))
+
+    entries = read_log_entries(log_path, ZoneInfo("Europe/Zurich"))
+
+    assert [entry.raw_text for entry in entries] == [archived, prefix, current]
+    assert entries[1].timestamp is None
+    assert entries[2].details == "\n\tTraceback mit Einrückung\nLetzte Zeile ohne Zeilenumbruch"
+    assert log_path.read_bytes() == (prefix + current).encode("utf-8")
+    assert log_path.with_name("app.log.1").read_bytes() == archived.encode("utf-8")
 
 
 def test_log_filters_search_and_pagination_include_all_backups(tmp_path, monkeypatch) -> None:
@@ -158,6 +194,139 @@ def test_server_serves_log_page(tmp_path) -> None:
         thread.join(timeout=3)
 
 
+def test_raw_log_returns_current_file_bytes_and_reports_read_errors(tmp_path, monkeypatch) -> None:
+    output_path = tmp_path / "index.html"
+    output_path.write_text("<!doctype html><title>Übersicht</title>", encoding="utf-8")
+    log_path = tmp_path / "app.log"
+    archived = b"2026-09-29T10:00:00Z INFO app: Nur im Archiv\n"
+    log_path.with_name("app.log.1").write_bytes(archived)
+    original = (
+        "2026-09-30T10:00:00+00:00 INFO app: Grüsse\r\n"
+        "\t<script>alert(1)</script>\r\n\r\n"
+    ).encode("utf-8") + b"Unformatierte letzte Zeile \xff"
+    log_path.write_bytes(original)
+    storage = Storage(tmp_path / "state.sqlite3")
+    storage.initialize()
+    server = ApplicationServer(("127.0.0.1", 0), output_path, storage, log_path, "Europe/Zurich")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection(*server.server_address, timeout=3)
+    try:
+        connection.request("GET", "/log/raw?period=7d&level=ERROR&path=../other.log")
+        response = connection.getresponse()
+        assert response.status == 200
+        assert response.getheader("Content-Type") == "text/plain; charset=utf-8"
+        assert response.getheader("Content-Length") == str(len(original))
+        assert response.getheader("Content-Disposition") == "inline"
+        assert response.getheader("Cache-Control") == "no-store"
+        assert response.getheader("X-Content-Type-Options") == "nosniff"
+        assert response.getheader("Referrer-Policy") == "no-referrer"
+        assert "sandbox" in response.getheader("Content-Security-Policy")
+        assert response.read() == original
+        assert log_path.read_bytes() == original
+
+        log_path.write_bytes(b"")
+        connection.request("GET", "/log/raw")
+        response = connection.getresponse()
+        assert response.status == 200
+        assert response.getheader("Content-Length") == "0"
+        assert response.read() == b""
+
+        log_path.unlink()
+        connection.request("GET", "/log/raw")
+        response = connection.getresponse()
+        html = response.read().decode("utf-8")
+        assert response.status == 404
+        assert "Die aktuelle Logdatei ist noch nicht vorhanden" in html
+        assert 'href="/log">Zurück zum Log</a>' in html
+
+        read_bytes = Path.read_bytes
+
+        def unreadable(path):
+            if path == log_path:
+                raise PermissionError("Isolierter Lesefehler")
+            return read_bytes(path)
+
+        monkeypatch.setattr(Path, "read_bytes", unreadable)
+        connection.request("GET", "/log/raw")
+        response = connection.getresponse()
+        html = response.read().decode("utf-8")
+        assert response.status == 500
+        assert "Die aktuelle Logdatei konnte nicht gelesen werden" in html
+        assert 'href="/log">Zurück zum Log</a>' in html
+        assert "Isolierter Lesefehler" not in html
+        assert log_path.with_name("app.log.1").read_bytes() == archived
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
+
+
+def test_action_error_pages_escape_messages_and_keep_recovery_links(tmp_path) -> None:
+    class Importer:
+        def selection_options(self, source):
+            raise SelectionUnavailable("Quelle <script>alert(1)</script> wurde verändert")
+
+    class Scanner:
+        config = SimpleNamespace(media_import_enabled=True)
+        importer = Importer()
+
+        def reopen_announcements(self, keys):
+            raise JellyfinError("Jellyfin <script>alert(1)</script> ist nicht erreichbar")
+
+    storage = Storage(tmp_path / "state.sqlite3")
+    storage.initialize()
+    output = tmp_path / "index.html"
+    output.write_text("<!doctype html><title>Übersicht</title>")
+    server = ApplicationServer(
+        ("127.0.0.1", 0), output, storage, tmp_path / "app.log", "Europe/Zurich", Scanner(),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        origin = "http://%s:%s" % server.server_address
+        requests = [
+            ("POST", "/announcements/reopen", urlencode({"source_key": "a" * 64}), 503, "/#history", "Zurück zur Historie"),
+            ("GET", "/media-import/resolve?source=show", None, 409, "/#media-import", "Zurück zum Medienimport"),
+        ]
+        for method, path, body, status, return_url, label in requests:
+            connection = http.client.HTTPConnection(*server.server_address, timeout=3)
+            try:
+                connection.request(method, path, body, {
+                    "Origin": origin, "Content-Type": "application/x-www-form-urlencoded",
+                })
+                response = connection.getresponse()
+                html = response.read().decode()
+                assert response.status == status
+                assert response.getheader("Cache-Control") == "no-store"
+                assert "frame-ancestors 'none'" in response.getheader("Content-Security-Policy")
+                assert 'aria-label="Ansichten"' in html
+                assert f'href="{return_url}">{label}</a>' in html
+                assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+                assert "<script>alert(1)</script>" not in html
+            finally:
+                connection.close()
+        connection = http.client.HTTPConnection(*server.server_address, timeout=3)
+        try:
+            connection.request("GET", "/")
+            response = connection.getresponse()
+            assert "script-src 'self'" in response.getheader("Content-Security-Policy")
+            assert "connect-src 'self'" in response.getheader("Content-Security-Policy")
+            response.read()
+            connection.request("GET", "/ui.js")
+            response = connection.getresponse()
+            assert response.status == 200
+            assert response.getheader("Content-Type") == "text/javascript; charset=utf-8"
+            assert b"data-run-feedback" in response.read()
+        finally:
+            connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
+
+
 def test_manual_run_buttons_follow_import_setting(tmp_path) -> None:
     storage = Storage(tmp_path / "state.sqlite3")
     storage.initialize()
@@ -188,8 +357,8 @@ def test_manual_run_buttons_follow_import_setting(tmp_path) -> None:
     assert "(ohne Wartefrist)" not in html
 
     Renderer(storage, output, "Europe/Zurich", False).render()
-    assert 'action="/run/import"' not in output.read_text(encoding="utf-8")
-    assert 'action="/run/income-scan"' not in output.read_text(encoding="utf-8")
+    assert '<form method="post" action="/run/import"' not in output.read_text(encoding="utf-8")
+    assert '<form method="post" action="/run/income-scan"' not in output.read_text(encoding="utf-8")
 
 
 def test_manual_import_refreshes_only_while_running(tmp_path) -> None:
@@ -202,10 +371,13 @@ def test_manual_import_refreshes_only_while_running(tmp_path) -> None:
     storage.begin_manual_import(started)
     renderer.render()
     running = output.read_text(encoding="utf-8")
-    assert 'http-equiv="refresh" content="3"' in running
+    assert 'http-equiv="refresh"' not in running
+    assert 'src="/ui.js"' in running
+    assert 'data-run-feedback="import" data-running="true"' in running
     assert "Manuelles Einsortieren läuft" in running
     assert 'class="scan-state running">Import läuft' in running
-    assert "Die Seite wird nach dem Abschluss automatisch aktualisiert." in running
+    assert "Der Status wird im Hintergrund aktualisiert." in running
+    assert "Ansicht aktualisieren" in running
     assert "Manuelles Einsortieren läuft" not in running.split('id="overview-view"', 1)[1]
 
     storage.complete_manual_import(started, "1 übernommen, 0 blockiert, 0 wartend", [])
@@ -213,7 +385,7 @@ def test_manual_import_refreshes_only_while_running(tmp_path) -> None:
     completed = output.read_text(encoding="utf-8")
     assert 'http-equiv="refresh"' not in completed
     assert "Manuelles Einsortieren abgeschlossen" not in completed
-    assert "Manuelles Einsortieren läuft" not in completed
+    assert 'data-run-feedback="import" data-running="false" hidden' in completed
     assert 'class="scan-state">Import bereit' in completed
 
     storage.fail_manual_import(started, "Jellyfin nicht erreichbar")
@@ -233,7 +405,8 @@ def test_manual_feed_refreshes_only_while_running(tmp_path) -> None:
     renderer = Renderer(storage, output, "Europe/Zurich")
     renderer.render()
     running = output.read_text(encoding="utf-8")
-    assert 'http-equiv="refresh" content="3"' in running
+    assert 'http-equiv="refresh"' not in running
+    assert 'data-run-feedback="feed" data-running="true"' in running
     assert "Feed-Abgleich läuft" in running
     assert "Feed-Abgleich läuft" not in running.split('id="media-import-view"', 1)[1].split('id="overview-view"', 1)[0]
 
@@ -242,7 +415,7 @@ def test_manual_feed_refreshes_only_while_running(tmp_path) -> None:
 
     html = output.read_text(encoding="utf-8")
     assert 'http-equiv="refresh"' not in html
-    assert "Feed-Abgleich läuft" not in html
+    assert 'data-run-feedback="feed" data-running="false" hidden' in html
     assert "Feed-Abgleich abgeschlossen" not in html
     assert html.count('class="scan-state warning">') == 2
 
@@ -337,6 +510,8 @@ def test_manual_run_endpoints_accept_same_origin_and_reject_other_origins(tmp_pa
         status, _, body = request("POST", "/run/feed", {"Origin": origin})
         assert status == 409
         assert "Ein anderer Lauf" in body
+        assert 'aria-label="Ansichten"' in body
+        assert 'href="/#overview">Zurück zum Feed</a>' in body
         assert request("POST", "/run/income-scan", {"Origin": origin})[0] == 409
         scanner.config.media_import_enabled = False
         assert request("POST", "/run/import", {"Origin": origin})[0] == 404

@@ -1,0 +1,72 @@
+<style>
+  :root {
+    color-scheme: dark;
+    --font-interface: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-data: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --background: #121212;
+    --surface: #191919;
+    --surface-hover: #222222;
+    --border: #333333;
+    --text: #e0e0e0;
+    --muted: #a5a5a5;
+    --accent: #c5c5c5;
+    --accent-soft: #282828;
+    --link: #d0d0d0;
+    --visited: #b0b0b0;
+    --success: #a0c8af;
+    --success-soft: #202d26;
+    --warning: #dfc18e;
+    --warning-soft: #30291e;
+    --danger: #e6aaa4;
+    --danger-soft: #352522;
+    --control: #292929;
+    --control-hover: #343434;
+    --control-border: #5c5c5c;
+    --control-text: #e0e0e0;
+    --radius: 8px;
+    --radius-badge: 3px;
+  }
+  * { box-sizing: border-box; }
+  html { min-height: 100%; background: var(--background); scrollbar-color: var(--control-border) var(--background); }
+  body { min-height: 100vh; margin: 0; background: var(--background); color: var(--text); font-family: var(--font-interface); line-height: 1.55; }
+  ::selection { background: #555555; color: #ffffff; }
+  a { color: var(--link); text-underline-offset: 3px; }
+  a:visited { color: var(--visited); }
+  a:hover { color: var(--text); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  h1, h2 { text-wrap: balance; }
+  h1 { font-size: 1.25rem; line-height: 1.35; font-weight: 600; letter-spacing: -.015em; }
+  h2 { font-size: 1.0625rem; line-height: 1.4; font-weight: 600; letter-spacing: -.015em; }
+  p { text-wrap: pretty; }
+  input, select { caret-color: var(--accent); accent-color: var(--accent); }
+  .shell { width: min(1320px, calc(100% - 64px)); margin: 0 auto; padding: 24px 0 56px; }
+  .topbar { position: sticky; z-index: 5; top: 0; display: flex; align-items: center; flex-wrap: wrap; column-gap: 40px; margin-bottom: 24px; border-bottom: 1px solid var(--border); background: var(--background); }
+  .brand { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 10px; min-height: 44px; color: var(--text); font-size: .875rem; font-weight: 600; letter-spacing: -.01em; text-decoration: none; }
+  .brand:visited { color: var(--text); }
+  .brand-mark { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: .75rem; font-weight: 600; }
+  .nav { display: flex; flex-wrap: wrap; gap: 24px; margin: 0; padding: 0; }
+  .nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 12px 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); font: 500 .875rem/1.4 var(--font-interface); text-decoration: none; }
+  .nav a:hover { color: var(--text); }
+  .nav a[aria-current="page"] { background: transparent; color: var(--text); box-shadow: inset 0 -2px var(--accent); }
+  button, .button, .return { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 14px; border: 1px solid var(--control-border); border-radius: 6px; background: var(--control); color: var(--control-text); font: 500 .875rem/1.4 var(--font-interface); text-decoration: none; cursor: pointer; }
+  .button:visited, .return:visited { color: var(--control-text); }
+  button:hover, .button:hover, .return:hover { background: var(--control-hover); }
+  button:active, .button:active, .return:active { background: var(--accent-soft); }
+  button:disabled { opacity: .65; cursor: wait; }
+  .actions form[action="/run/feed"] button, .actions form[action="/run/import"] button, .choice button { background: var(--accent-soft); border-color: #686868; color: #ececec; }
+  .actions form[action="/run/feed"] button:hover, .actions form[action="/run/import"] button:hover, .choice button:hover { background: #363636; }
+  .complete-action button { min-height: 30px; padding: 4px 10px; border-color: var(--border); background: transparent; font-size: .8125rem; }
+  .complete-action button:hover { background: var(--control-hover); }
+  .run-feedback button { min-height: 34px; font-size: .8125rem; }
+  @media (max-width: 760px) {
+    .shell { width: calc(100% - 32px); padding-top: 16px; }
+    .topbar { column-gap: 32px; margin-bottom: 20px; }
+  }
+  @media (max-width: 640px) {
+    .nav { flex-basis: 100%; }
+  }
+  @media (max-width: 470px) {
+    .nav { gap: 20px; }
+    .nav a { font-size: .8125rem; }
+  }
+</style>

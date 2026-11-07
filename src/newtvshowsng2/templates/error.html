@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#121212">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <title>{{ title }} · NewTVShowsNG2</title>
+  {% include "_theme.html" %}
+  <style>
+    .notice { max-width: 72ch; }
+    h1 { margin: 0 0 16px;  }
+    .reason { padding: 16px; border: 1px solid #704d47; border-radius: 8px; background: var(--danger-soft); color: var(--danger); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .hint { color: var(--muted); }
+    @media (max-width: 760px) { .shell { width: calc(100% - 24px); padding-top: 16px; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">N</span>NewTVShowsNG2</a>
+      <nav class="nav" aria-label="Ansichten">
+        <a href="/#overview">Feed</a><a href="/#media-import">Medienimport</a><a href="/#history">Historie</a><a href="/log">Log</a>
+      </nav>
+    </header>
+    <section class="notice" aria-labelledby="error-title">
+      <h1 id="error-title">{{ title }}</h1>
+      <p class="reason" role="alert">{{ message }}</p>
+      <p class="hint">Prüfe den aktuellen Stand, bevor du die Aktion erneut ausführst. Wenn ein Lauf aktiv ist, warte dessen Abschluss ab. Öffne eine Serienzuordnung nach geänderten Quellen erneut.</p>
+      <a class="return" href="{{ return_url }}">{{ return_label }}</a>
+    </section>
+  </main>
+</body>
+</html>

@@ -7,7 +7,7 @@ import os
 import re
 import stat
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
 
@@ -65,11 +65,20 @@ class SourceUnit:
 
 
 @dataclass(frozen=True, slots=True)
+class SelectionSource:
+    source_path: str
+    signature: str
+    season: int
+    episode: int
+
+
+@dataclass(frozen=True, slots=True)
 class SeriesChoice:
     remote: RemoteSeries
     key: str
     imdb_url: str | None
     existing_series: Series | None = None
+    sources: tuple[SelectionSource, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +96,7 @@ class SelectedSeries:
     parsed: ParsedRelease
     remote: RemoteSeries
     existing_series_id: str | None = None
+    sources: tuple[SelectionSource, ...] = ()
 
 
 class SelectionUnavailable(ValueError):
@@ -168,14 +178,56 @@ class MediaImporter:
             except ImportBlocked as exc:
                 raise SelectionUnavailable(str(exc)) from exc
             if choice is not None:
-                return SelectionOptions(source_path, unit.signature, parsed, (choice,))
+                choices = (choice,)
+                return self._selection_preview(source_path, unit.signature, parsed, choices)
         if len(candidates) < 2:
             raise SelectionUnavailable("Jellyfin meldet keine passende Serienauswahl mehr")
         choices = tuple(
             SeriesChoice(remote, _choice_key(remote), _imdb_url(remote))
             for remote in candidates
         )
-        return SelectionOptions(source_path, unit.signature, parsed, choices)
+        return self._selection_preview(source_path, unit.signature, parsed, choices)
+
+    def _selection_preview(
+        self, source_path: str, signature: str, parsed: ParsedRelease,
+        choices: tuple[SeriesChoice, ...],
+    ) -> SelectionOptions:
+        previews = []
+        for choice in choices:
+            selection = SelectedSeries(
+                source_path, signature, parsed, choice.remote,
+                choice.existing_series.id if choice.existing_series is not None else None,
+            )
+            sources = self._selection_sources(selection)
+            # Die Bestätigung bindet auch die angezeigten Quellen, damit später
+            # hinzugekommene Folgen nicht unbemerkt in denselben Import gelangen.
+            payload = json.dumps([
+                choice.key,
+                [(item.source_path, item.signature) for item in sources],
+            ], ensure_ascii=False, separators=(",", ":"))
+            key = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+            previews.append(replace(choice, key=key, sources=sources))
+        return SelectionOptions(source_path, signature, parsed, tuple(previews))
+
+    def _selection_sources(self, selection: SelectedSeries) -> tuple[SelectionSource, ...]:
+        sources = []
+        try:
+            paths = sorted(self.config.income_dir.iterdir(), key=lambda path: path.name)
+            for path in paths:
+                if not self._belongs_to_selection(path, selection):
+                    continue
+                unit = self._inspect_source(path)
+                parsed = self._parse_source(unit)
+                if parsed is None or parsed.episode is None or parsed.season != parsed.season_end:
+                    raise SelectionUnavailable("Importumfang ist nicht eindeutig lesbar")
+                sources.append(SelectionSource(
+                    path.name, unit.signature, parsed.season, parsed.episode,
+                ))
+        except (OSError, ImportBlocked) as exc:
+            raise SelectionUnavailable(f"Importumfang konnte nicht geprüft werden: {exc}") from exc
+        if not any(item.source_path == selection.source_path for item in sources):
+            raise SelectionUnavailable("Importumfang wurde verändert. Bitte Auswahl neu öffnen")
+        return tuple(sources)
 
     def select_series(
         self, source_path: str, signature: str, choice_key: str
@@ -188,12 +240,13 @@ class MediaImporter:
         matches = [choice for choice in options.choices if choice.key == choice_key]
         if len(matches) != 1:
             raise SelectionUnavailable(
-                "Jellyfin-Suchergebnis wurde verändert; bitte Auswahl neu öffnen"
+                "Jellyfin-Suchergebnis oder Importumfang wurde verändert. Bitte Auswahl neu öffnen"
             )
         choice = matches[0]
         return SelectedSeries(
             source_path, signature, options.parsed, choice.remote,
             choice.existing_series.id if choice.existing_series is not None else None,
+            choice.sources,
         )
 
     def run(
@@ -206,6 +259,8 @@ class MediaImporter:
         self._validate_jellyfin_root()
 
         if selection is not None:
+            if not selection.sources or self._selection_sources(selection) != selection.sources:
+                raise SelectionUnavailable("Importumfang wurde verändert. Bitte Auswahl neu öffnen")
             selected_source = self.config.income_dir / selection.source_path
             try:
                 current = self._inspect_source(selected_source)
@@ -233,7 +288,8 @@ class MediaImporter:
         new_series_paths: set[Path] = set()
         units = sorted(self.config.income_dir.iterdir(), key=lambda item: item.name.casefold())
         if selection is not None:
-            units = [path for path in units if self._belongs_to_selection(path, selection)]
+            confirmed = {item.source_path: item for item in selection.sources}
+            units = [path for path in units if path.name in confirmed]
             units.sort(
                 key=lambda path: (path.name != selection.source_path, path.name.casefold())
             )
@@ -245,6 +301,8 @@ class MediaImporter:
                 continue
             try:
                 unit = self._inspect_source(path)
+                if selection is not None and unit.signature != confirmed[relative].signature:
+                    raise ImportBlocked("Bestätigte Quelle wurde verändert. Bitte Auswahl neu öffnen")
             except ImportBlocked as exc:
                 signature = self._best_effort_signature(path)
                 self.storage.observe_media_import(relative, signature, now)

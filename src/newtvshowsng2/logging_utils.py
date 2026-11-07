@@ -27,10 +27,15 @@ class LogEntry:
     source: str
     message: str
     _detail_lines: list[str] = field(default_factory=list)
+    _raw_lines: list[str] = field(default_factory=list)
 
     @property
     def details(self) -> str:
         return "\n".join(self._detail_lines)
+
+    @property
+    def raw_text(self) -> str:
+        return "".join(self._raw_lines)
 
 
 class UTCFormatter(logging.Formatter):
@@ -68,13 +73,17 @@ def read_log_entries(log_path: Path, timezone: ZoneInfo) -> list[LogEntry]:
     entries: list[LogEntry] = []
     for path in _log_paths(log_path):
         try:
-            content = path.read_text(encoding="utf-8", errors="replace")
+            # Der Originaltext soll die Zeilenenden der Datei behalten.
+            with path.open(encoding="utf-8", errors="replace", newline="") as log_file:
+                content = log_file.read()
         except FileNotFoundError:
             continue
         except OSError as exc:
             entries.append(LogEntry(None, "ERROR", "Log", f"{path.name} konnte nicht gelesen werden: {exc}"))
             continue
-        for line in content.splitlines():
+        current_entry = None
+        for raw_line in content.splitlines(keepends=True):
+            line = raw_line.rstrip("\r\n")
             match = LOG_HEADER.match(line)
             if match:
                 try:
@@ -82,12 +91,18 @@ def read_log_entries(log_path: Path, timezone: ZoneInfo) -> list[LogEntry]:
                     timestamp = datetime.fromisoformat(raw_time)
                     if timestamp.tzinfo is None:
                         timestamp = timestamp.replace(tzinfo=timezone)
-                    entries.append(LogEntry(timestamp, match["level"], match["source"], match["message"]))
+                    current_entry = LogEntry(
+                        timestamp, match["level"], match["source"], match["message"],
+                        _raw_lines=[raw_line],
+                    )
+                    entries.append(current_entry)
                     continue
                 except ValueError:
                     pass
-            if entries:
-                entries[-1]._detail_lines.append(line)
+            if current_entry is not None:
+                current_entry._detail_lines.append(line)
+                current_entry._raw_lines.append(raw_line)
             elif line:
-                entries.append(LogEntry(None, "INFO", "Log", line))
+                current_entry = LogEntry(None, "INFO", "Log", line, _raw_lines=[raw_line])
+                entries.append(current_entry)
     return entries

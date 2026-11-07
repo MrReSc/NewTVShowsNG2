@@ -106,6 +106,19 @@ class Renderer:
         )
 
     @staticmethod
+    def render_error(
+        title: str, message: str, return_url: str, return_label: str,
+    ) -> str:
+        environment = Environment(
+            loader=PackageLoader("newtvshowsng2", "templates"),
+            autoescape=select_autoescape(("html", "xml")),
+        )
+        return environment.get_template("error.html").render(
+            title=title, message=message,
+            return_url=return_url, return_label=return_label,
+        )
+
+    @staticmethod
     def _atomic_write(path: Path, content: str) -> None:
         descriptor, temporary_path = tempfile.mkstemp(
             prefix=f".{path.stem}-", suffix=path.suffix, dir=path.parent, text=True
@@ -293,7 +306,7 @@ class LogRenderer:
                     "level": entry.level,
                     "source": entry.source,
                     "message": entry.message,
-                    "details": entry.details,
+                    "raw_text": entry.raw_text,
                 }
                 for entry in selected
             ],
