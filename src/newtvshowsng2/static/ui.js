@@ -12,14 +12,8 @@
       const remoteFeedback = [...page.querySelectorAll("[data-run-feedback]")];
       if (remoteFeedback.length !== 2) throw new Error("Status unvollständig");
 
-      // Nur Statusfelder werden ersetzt. Tabellen, Filter und der Bedienpunkt
-      // bleiben bis zum ausdrücklich angeforderten Laden neuer Ergebnisse erhalten.
-      for (const current of document.querySelectorAll("[data-live-status]")) {
-        const incoming = page.querySelector(`[data-live-status="${current.dataset.liveStatus}"]`);
-        if (incoming && current.innerHTML !== incoming.innerHTML) {
-          current.replaceChildren(...[...incoming.childNodes].map(node => node.cloneNode(true)));
-        }
-      }
+      // Tabellen und Filter bleiben erhalten, damit laufende Prüfungen
+      // die aktuelle Bedienung nicht durch neue Ergebnisse unterbrechen.
       const busy = remoteFeedback.some(node => node.dataset.running === "true");
       for (const button of document.querySelectorAll("[data-run-start]")) button.disabled = busy;
       for (const current of feedback) {

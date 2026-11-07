@@ -3,7 +3,6 @@ from __future__ import annotations
 import http.client
 import logging
 import threading
-from html import unescape
 from pathlib import Path
 from urllib.parse import urlencode
 from datetime import UTC, datetime
@@ -82,10 +81,12 @@ def test_log_renderer_groups_tracebacks_and_escapes_content(tmp_path) -> None:
     assert "Alter Eintrag" in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert "<script>alert(1)</script>" not in html
-    assert html.count('<details><summary>Original anzeigen</summary>') == 2
-    original = html.split('aria-label="Originaltext des Logeintrags">', 1)[1].split("</pre>", 1)[0]
-    assert unescape(original) == entries[1].raw_text
-    assert 'href="/log/raw" target="_blank" rel="noopener noreferrer"' in html
+    assert "Original anzeigen" not in html
+    assert "Neueste Meldungen zuerst" not in html
+    assert "Ältester gespeicherter Eintrag" not in html
+    assert "<details" not in html
+    assert html.count("&lt;script&gt;alert(1)&lt;/script&gt;") == 1
+    assert 'class="button" href="/log/raw" target="_blank" rel="noopener noreferrer"' in html
     assert 'http-equiv="refresh"' not in html
     assert "Aktualisieren" in html
     assert '<a class="button reset" href="/log">Zurücksetzen</a>' in html
@@ -148,7 +149,7 @@ def test_log_filters_search_and_pagination_include_all_backups(tmp_path, monkeyp
     assert "recent info" in page_two and "recent error" not in page_two
     seven_days = renderer.render("period=7d&level=WARNING&page=2", now=now)
     assert "old warning" in seven_days and "too old" not in seven_days
-    assert "Ältester gespeicherter Eintrag: 23.09.2026" in seven_days
+    assert "Ältester gespeicherter Eintrag" not in seven_days
     searched = renderer.render("period=7d&level=WARNING&q=warning", now=now)
     assert "old warning" in searched and "recent warning" in searched
     assert "recent error" not in searched
@@ -334,25 +335,19 @@ def test_manual_run_buttons_follow_import_setting(tmp_path) -> None:
 
     Renderer(storage, output, "Europe/Zurich", True).render()
     html = output.read_text(encoding="utf-8")
-    header = html.split('<header class="topbar">', 1)[1].split('</header>', 1)[0]
     assert 'method="post" action="/run/feed"' in html
     assert 'method="post" action="/run/import"' in html
     assert 'method="post" action="/run/income-scan"' in html
     media_view = html.split('id="media-import-view"', 1)[1].split('id="overview-view"', 1)[0]
     overview_view = html.split('id="overview-view"', 1)[1].split('id="history-view"', 1)[0]
     history_view = html.split('id="history-view"', 1)[1].split('<footer>', 1)[0]
-    assert 'scan-state' not in header
-    assert "Nächster Lauf:" not in header
+    assert 'scan-state' not in html
+    assert 'data-live-status' not in html
+    assert 'class="count"' not in html
+    assert "Nächster Lauf:" not in html
     assert 'action="/run/feed"' not in media_view
     assert 'action="/run/import"' not in overview_view
     assert 'action="/run/income-scan"' not in overview_view
-    assert 'class="scan-state"' in media_view
-    assert "Import bereit" in media_view
-    assert 'class="scan-state starting"' in overview_view
-    assert "Wird vorbereitet" in overview_view
-    assert "Nächster Lauf:" in overview_view
-    assert 'class="scan-state starting"' in history_view
-    assert "Nächster Lauf:" in history_view
     assert 'action="/run/feed"' not in history_view
     assert "(ohne Wartefrist)" not in html
 
@@ -375,7 +370,7 @@ def test_manual_import_refreshes_only_while_running(tmp_path) -> None:
     assert 'src="/ui.js"' in running
     assert 'data-run-feedback="import" data-running="true"' in running
     assert "Manuelles Einsortieren läuft" in running
-    assert 'class="scan-state running">Import läuft' in running
+    assert 'data-run-start disabled' in running
     assert "Der Status wird im Hintergrund aktualisiert." in running
     assert "Ansicht aktualisieren" in running
     assert "Manuelles Einsortieren läuft" not in running.split('id="overview-view"', 1)[1]
@@ -386,14 +381,15 @@ def test_manual_import_refreshes_only_while_running(tmp_path) -> None:
     assert 'http-equiv="refresh"' not in completed
     assert "Manuelles Einsortieren abgeschlossen" not in completed
     assert 'data-run-feedback="import" data-running="false" hidden' in completed
-    assert 'class="scan-state">Import bereit' in completed
+    assert 'data-run-start disabled' not in completed
 
     storage.fail_manual_import(started, "Jellyfin nicht erreichbar")
     renderer.render()
     failed = output.read_text(encoding="utf-8")
     assert 'http-equiv="refresh"' not in failed
     assert "Manuelles Einsortieren fehlgeschlagen" not in failed
-    assert 'class="scan-state error">Letzter manueller Import fehlgeschlagen' in failed
+    assert 'data-run-feedback="import" data-running="false" hidden' in failed
+    assert 'data-run-start disabled' not in failed
 
 
 def test_manual_feed_refreshes_only_while_running(tmp_path) -> None:
@@ -417,7 +413,7 @@ def test_manual_feed_refreshes_only_while_running(tmp_path) -> None:
     assert 'http-equiv="refresh"' not in html
     assert 'data-run-feedback="feed" data-running="false" hidden' in html
     assert "Feed-Abgleich abgeschlossen" not in html
-    assert html.count('class="scan-state warning">') == 2
+    assert 'scan-state' not in html
 
 
 def test_error_notices_appear_only_in_matching_view(tmp_path) -> None:

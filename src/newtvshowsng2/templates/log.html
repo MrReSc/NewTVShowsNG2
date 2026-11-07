@@ -9,35 +9,24 @@
   <title>Log · NewTVShowsNG2</title>
   {% include "_theme.html" %}
   <style>
-    a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-    .heading { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 12px 18px; margin-bottom: 18px; }
-    .heading h1 { margin: 0; }
-    .hint { margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
+    .heading { display: flex; align-items: flex-end; justify-content: flex-end; flex-wrap: wrap; gap: 12px 18px; margin-bottom: 18px; }
     .log-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-    .raw-link { padding: 8px 10px; color: var(--muted); font-size: .875rem; text-underline-offset: 3px; }
-    .raw-link:visited { color: var(--muted); }
-    .raw-link:hover { color: var(--text); }
-    .filters { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .filters { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
     .filters label { display: grid; gap: 5px; color: var(--muted); font-size: .8rem; }
-    .filters select, .filters input { min-height: 39px; padding: 8px 10px; border: 1px solid #505050; border-radius: 5px; background: #101010; color: var(--text); font: inherit; font-size: .9rem; }
+    .filters select, .filters input { min-height: 39px; padding: 8px 10px; font: inherit; font-size: .9rem; }
     .filters .search { flex: 1 1 220px; }
     .filters input { width: 100%; }
-    .button.reset { background: #202020; }
-    .button.reset:hover { background: #2a2a2a; }
     .result-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 18px; margin: 0 0 10px; color: var(--muted); font-size: .82rem; }
-    .entries { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .entries { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
     .entry { display: grid; grid-template-columns: 210px 82px minmax(0, 1fr); gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
     .entry:last-child { border-bottom: 0; }
     .time { color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
-    .level { align-self: start; width: fit-content; padding: 2px 6px; border: 1px solid transparent; border-radius: var(--radius-badge); background: #292929; color: var(--muted); font: 600 .72rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .level { align-self: start; width: fit-content; padding: 2px 6px; border: 1px solid transparent; border-radius: var(--radius-detail); background: #292929; color: var(--muted); font: 600 .72rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     .level.warning { background: var(--warning-soft); color: var(--warning); }
     .level.error, .level.critical { background: var(--danger-soft); color: var(--danger); }
     .body { min-width: 0; }
     .message { margin: 0; font-size: .9375rem; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
     .source { display: block; margin-top: 4px; color: var(--muted); font-size: .76rem; overflow-wrap: anywhere; }
-    details { margin-top: 8px; }
-    summary { width: fit-content; min-height: 28px; padding: 4px 0; color: var(--link); cursor: pointer; font-size: .8125rem; }
-    .log-text { max-height: 400px; margin: 8px 0 0; padding: 12px; overflow: auto; border: 1px solid var(--border); border-radius: 5px; background: #101010; color: var(--text); font: .8125rem/1.55 var(--font-data); white-space: pre; tab-size: 4; }
     .empty { padding: 38px 16px; color: var(--muted); text-align: center; }
     .pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; font-size: .85rem; }
     @media (max-width: 800px) { .entry { grid-template-columns: auto 1fr; gap: 5px 10px; } .body { grid-column: 1 / -1; } }
@@ -46,19 +35,12 @@
 </head>
 <body>
   <main class="shell">
-    <header class="topbar">
-      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">N</span>NewTVShowsNG2</a>
-      <nav class="nav" aria-label="Ansichten">
-        <a href="/#overview">Feed</a>
-        <a href="/#media-import">Medienimport</a>
-        <a href="/#history">Historie</a>
-        <a href="/log" aria-current="page">Log</a>
-      </nav>
-    </header>
+    {% set navigation_page = 'log' %}
+    {% include "_navigation.html" %}
+    <h1 class="visually-hidden">Diagnoselog</h1>
     <div class="heading">
-      <div><h1>Diagnoselog</h1><p class="hint">Neueste Meldungen zuerst</p></div>
       <div class="log-actions">
-        <a class="raw-link" href="/log/raw" target="_blank" rel="noopener noreferrer">Raw-Log öffnen</a>
+        <a class="button" href="/log/raw" target="_blank" rel="noopener noreferrer">Raw-Log öffnen</a>
         <a class="button refresh" href="{{ refresh_url }}">Aktualisieren</a>
       </div>
     </div>
@@ -86,7 +68,6 @@
     </form>
     <div class="result-meta">
       <span>{{ entry_count }} passende Einträge</span>
-      <span>{% if oldest %}Ältester gespeicherter Eintrag: {{ oldest }}{% else %}Noch keine datierten Einträge gespeichert{% endif %}</span>
     </div>
     {% if entries %}
     <ol class="entries">
@@ -97,7 +78,6 @@
         <div class="body">
           <p class="message">{{ entry.message }}</p>
           <span class="source">{{ entry.source }}</span>
-          {% if entry.raw_text %}<details><summary>Original anzeigen</summary><pre class="log-text" tabindex="0" role="region" aria-label="Originaltext des Logeintrags">{{ entry.raw_text }}</pre></details>{% endif %}
         </div>
       </li>
       {% endfor %}
@@ -105,9 +85,9 @@
     {% else %}<div class="entries empty">Keine passenden Logeinträge vorhanden.</div>{% endif %}
     {% if page_count > 1 %}
     <nav class="pagination" aria-label="Logseiten">
-      {% if previous_url %}<a href="{{ previous_url }}">← Neuere</a>{% endif %}
+      {% if previous_url %}<a class="button" href="{{ previous_url }}">← Neuere</a>{% endif %}
       <span>Seite {{ page }} von {{ page_count }}</span>
-      {% if next_url %}<a href="{{ next_url }}">Ältere →</a>{% endif %}
+      {% if next_url %}<a class="button" href="{{ next_url }}">Ältere →</a>{% endif %}
     </nav>
     {% endif %}
   </main>

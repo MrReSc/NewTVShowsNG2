@@ -11,62 +11,125 @@
     --muted: #a5a5a5;
     --accent: #c5c5c5;
     --accent-soft: #282828;
-    --link: #d0d0d0;
+    --link: var(--control-text);
     --visited: #b0b0b0;
+    --info: #98bee8;
+    --info-soft: #1e2b3b;
     --success: #a0c8af;
     --success-soft: #202d26;
     --warning: #dfc18e;
     --warning-soft: #30291e;
     --danger: #e6aaa4;
     --danger-soft: #352522;
-    --control: #292929;
-    --control-hover: #343434;
-    --control-border: #5c5c5c;
-    --control-text: #e0e0e0;
-    --radius: 8px;
-    --radius-badge: 3px;
+    --control: #262626;
+    --control-hover: #333333;
+    --control-pressed: #1f1f1f;
+    --control-selected: #3b3b3b;
+    --control-selected-hover: #484848;
+    --control-disabled: #1d1d1d;
+    --control-border: #6b6b6b;
+    --control-border-hover: #909090;
+    --control-border-pressed: #a5a5a5;
+    --control-border-selected: #858585;
+    --control-border-disabled: #3b3b3b;
+    --control-text: #d0d0d0;
+    --control-text-hover: #f0f0f0;
+    --control-text-disabled: #808080;
+    --control-focus: #c5c5c5;
+    --control-visited: #c5c5c5;
+    --control-visited-hover: #dedede;
+    --control-on-visited: #161616;
+    --radius-detail: 3px;
+    --radius-control: 6px;
+    --radius-surface: 10px;
+    --radius-pill: 999px;
   }
   * { box-sizing: border-box; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
   html { min-height: 100%; background: var(--background); scrollbar-color: var(--control-border) var(--background); }
   body { min-height: 100vh; margin: 0; background: var(--background); color: var(--text); font-family: var(--font-interface); line-height: 1.55; }
   ::selection { background: #555555; color: #ffffff; }
-  a { color: var(--link); text-underline-offset: 3px; }
+  a { border-radius: var(--radius-control); color: var(--link); text-underline-offset: 3px; }
   a:visited { color: var(--visited); }
-  a:hover { color: var(--text); }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  :focus-visible { outline: 2px solid var(--control-focus); outline-offset: 3px; }
   h1, h2 { text-wrap: balance; }
   h1 { font-size: 1.25rem; line-height: 1.35; font-weight: 600; letter-spacing: -.015em; }
   h2 { font-size: 1.0625rem; line-height: 1.4; font-weight: 600; letter-spacing: -.015em; }
   p { text-wrap: pretty; }
-  input, select { caret-color: var(--accent); accent-color: var(--accent); }
+  input, select { border-radius: var(--radius-control); caret-color: var(--control-focus); accent-color: var(--control-focus); }
+  input::placeholder { color: var(--muted); opacity: 1; }
+  :where(a, button, input, select, summary, .history-filters label) {
+    --interaction-fill: transparent;
+    --interaction-border: transparent;
+    --interaction-text: var(--control-text);
+    --interaction-hover-fill: var(--control-hover);
+  }
+  :is(button, .button, .return, .variant-links a, input:not([type="hidden"]), select) {
+    --interaction-fill: var(--control);
+    --interaction-border: var(--control-border);
+  }
+  :is(button, .button, .return, .variant-links a, .nav a, input:not([type="hidden"]), select, summary, .history-filters label) {
+    border: 1px solid var(--interaction-border);
+    background-color: var(--interaction-fill);
+    color: var(--interaction-text);
+  }
+  :where(a, button, input:not([type="hidden"]), select, summary, .history-filters label):hover:not(:disabled) {
+    border-color: var(--control-border-hover);
+    background-color: var(--interaction-hover-fill);
+    color: var(--control-text-hover);
+  }
+  :where(a, button, input:not([type="hidden"]), select, summary, .history-filters label):active:not(:disabled) {
+    border-color: var(--control-border-pressed);
+    background-color: var(--control-pressed);
+    color: var(--control-text-hover);
+  }
+  :is(a, button, input:not([type="hidden"]), select, summary):focus-visible { border-color: var(--control-focus); }
+  :is(button, input, select):disabled {
+    border-color: var(--control-border-disabled);
+    background-color: var(--control-disabled);
+    color: var(--control-text-disabled);
+    cursor: not-allowed;
+  }
+  button:disabled { cursor: wait; }
+  summary { width: fit-content; min-height: 28px; margin-inline: -6px; padding: 3px 5px; border-radius: var(--radius-control); list-style-position: inside; cursor: pointer; }
+  input[type="checkbox"] { appearance: none; display: inline-grid; place-content: center; flex: 0 0 auto; border-radius: var(--radius-detail); cursor: pointer; }
+  input[type="checkbox"]::before { width: 9px; height: 5px; border-bottom: 2px solid currentColor; border-left: 2px solid currentColor; transform: translateY(-1px) rotate(-45deg); visibility: hidden; content: ""; }
+  input[type="checkbox"]:checked::before { visibility: visible; }
+  input[type="checkbox"]:disabled { cursor: not-allowed; }
+  .history-filters label { padding: 4px 8px; border-radius: var(--radius-control); }
+  details[open] > summary,
+  input[type="checkbox"]:checked,
+  .history-filters label:has(input:checked),
+  .nav a[aria-current="page"],
+  body:not(:has(#history:target, #media-import:target)) .nav a[href="#overview"],
+  body:has(#history:target) .nav a[href="#history"],
+  body:has(#media-import:target) .nav a[href="#media-import"] {
+    --interaction-fill: var(--control-selected);
+    --interaction-border: var(--control-border-selected);
+    --interaction-text: var(--control-text-hover);
+    --interaction-hover-fill: var(--control-selected-hover);
+  }
+  /* Ein deckender Grund erhält die Besuchsmarkierung auch in Firefox. */
+  .variant-links a:visited { color: var(--control-on-visited); background-color: var(--control-visited); border-color: var(--control-visited); }
+  .variant-links a:visited:hover { color: var(--control-on-visited); background-color: var(--control-visited-hover); border-color: var(--control-visited-hover); }
+  .variant-links a:visited:active { color: var(--control-on-visited); background-color: var(--control-visited); border-color: var(--control-border-pressed); }
   .shell { width: min(1320px, calc(100% - 64px)); margin: 0 auto; padding: 24px 0 56px; }
-  .topbar { position: sticky; z-index: 5; top: 0; display: flex; align-items: center; flex-wrap: wrap; column-gap: 40px; margin-bottom: 24px; border-bottom: 1px solid var(--border); background: var(--background); }
-  .brand { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 10px; min-height: 44px; color: var(--text); font-size: .875rem; font-weight: 600; letter-spacing: -.01em; text-decoration: none; }
-  .brand:visited { color: var(--text); }
-  .brand-mark { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: .75rem; font-weight: 600; }
-  .nav { display: flex; flex-wrap: wrap; gap: 24px; margin: 0; padding: 0; }
-  .nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 12px 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); font: 500 .875rem/1.4 var(--font-interface); text-decoration: none; }
-  .nav a:hover { color: var(--text); }
-  .nav a[aria-current="page"] { background: transparent; color: var(--text); box-shadow: inset 0 -2px var(--accent); }
-  button, .button, .return { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 14px; border: 1px solid var(--control-border); border-radius: 6px; background: var(--control); color: var(--control-text); font: 500 .875rem/1.4 var(--font-interface); text-decoration: none; cursor: pointer; }
-  .button:visited, .return:visited { color: var(--control-text); }
-  button:hover, .button:hover, .return:hover { background: var(--control-hover); }
-  button:active, .button:active, .return:active { background: var(--accent-soft); }
-  button:disabled { opacity: .65; cursor: wait; }
-  .actions form[action="/run/feed"] button, .actions form[action="/run/import"] button, .choice button { background: var(--accent-soft); border-color: #686868; color: #ececec; }
-  .actions form[action="/run/feed"] button:hover, .actions form[action="/run/import"] button:hover, .choice button:hover { background: #363636; }
-  .complete-action button { min-height: 30px; padding: 4px 10px; border-color: var(--border); background: transparent; font-size: .8125rem; }
-  .complete-action button:hover { background: var(--control-hover); }
+  .topbar { position: sticky; z-index: 5; top: 0; margin-bottom: 24px; padding-bottom: 12px; background: var(--background); }
+  .nav { display: flex; gap: 4px; width: fit-content; max-width: 100%; margin: 0; padding: 5px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
+  .nav a { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 9px 17px; border-radius: var(--radius-pill); font: 500 .875rem/1.4 var(--font-interface); text-decoration: none; white-space: nowrap; }
+  button, .button, .return { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 14px; border-radius: var(--radius-control); font: 500 .875rem/1.4 var(--font-interface); text-decoration: none; cursor: pointer; }
+  .complete-action button { min-height: 30px; padding: 4px 10px; font-size: .8125rem; }
   .run-feedback button { min-height: 34px; font-size: .8125rem; }
   @media (max-width: 760px) {
     .shell { width: calc(100% - 32px); padding-top: 16px; }
-    .topbar { column-gap: 32px; margin-bottom: 20px; }
-  }
-  @media (max-width: 640px) {
-    .nav { flex-basis: 100%; }
+    .topbar { margin-bottom: 20px; }
   }
   @media (max-width: 470px) {
-    .nav { gap: 20px; }
-    .nav a { font-size: .8125rem; }
+    .nav { gap: 2px; padding: 4px; }
+    .nav a { padding-inline: 8px; font-size: .8125rem; }
+  }
+  @media (forced-colors: active) {
+    input[type="checkbox"] { appearance: auto; }
+    input[type="checkbox"]::before { content: none; }
   }
 </style>

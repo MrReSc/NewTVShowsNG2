@@ -12,13 +12,12 @@
     h1 { margin: 28px 0 12px; }
     p { color: var(--muted); max-width: 72ch; }
     .source { overflow-wrap: anywhere; color: var(--text); }
-    .choice { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); margin: 20px 0; padding: 24px; }
+    .choice { border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); margin: 20px 0; padding: 24px; }
     .choice h2 { margin: 0 0 6px; }
     .ids { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0; }
     .ids span { color: var(--muted); font: .8125rem var(--font-data); overflow-wrap: anywhere; }
     .choice form { margin-top: 16px; }
     .scope { margin: 24px 0; color: var(--text); }
-    .scope summary { cursor: pointer; }
     .scope ul { max-height: 240px; margin: 10px 0 0; padding-left: 0; overflow: auto; list-style: none; }
     .scope li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: baseline; margin: 10px 0; overflow-wrap: anywhere; font-size: .875rem; font-variant-numeric: tabular-nums; }
     .scope small { display: block; color: var(--muted); font-size: .8125rem; }
@@ -41,7 +40,7 @@
     {% for choice in options.choices %}
       {% if choice.sources != shared.sources %}{% set shared.sources = none %}{% endif %}
     {% endfor %}
-    <a href="/#media-import">← Zurück zum Medienimport</a>
+    <a class="button" href="/#media-import">← Zurück zum Medienimport</a>
     <h1>Serienzuordnung wählen</h1>
     <p class="source">Download: {{ options.source_path }}</p>
     {% if options.choices and options.choices[0].existing_series %}

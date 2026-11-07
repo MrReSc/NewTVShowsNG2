@@ -4,17 +4,41 @@ Die Oberfläche unterstützt die private Einzelnutzung am Desktop. Der bestätig
 
 ## Gestaltung
 
-Die vier HTML-Ansichten verwenden gemeinsame Farben, Schriftrollen, Navigation und Bedienelemente aus [_theme.html](../src/newtvshowsng2/templates/_theme.html). Flächen, Navigation, Links, Schaltflächen und Fokusmarkierungen verwenden Schwarz und neutrale Grautöne. Helligkeit und Konturen unterscheiden aktive Elemente. Gelb, Rot und Grün bleiben den jeweiligen Warnungen, Fehlern und fachlichen Statuswerten vorbehalten.
+Die vier HTML-Ansichten verwenden gemeinsame Farben, Schriftrollen, Navigation und Bedienelemente aus [_theme.html](../src/newtvshowsng2/templates/_theme.html). Flächen, Navigation, Links, Schaltflächen und Fokusmarkierungen verwenden Schwarz und neutrale Grautöne. Helligkeit und Konturen unterscheiden aktive Elemente. Blau kennzeichnet den Badge «Neu». Gelb, Rot und Grün bleiben den jeweiligen Warnungen, Fehlern und weiteren fachlichen Statuswerten vorbehalten.
 
-Status-Badges und Logstufen erscheinen als flache Rechtecke mit einem gemeinsamen Eckenradius von 3 Pixeln.
+Alle anklickbaren Bedienelemente beziehen ihre Zustandsfarben aus derselben Graustufenpalette. Die gemeinsamen Regeln stehen in `_theme.html`. Die einzelnen Ansichten legen Grösse und Anordnung fest. Interne Aktionslinks wie «Serie zuordnen», «Raw-Log öffnen», Seitenwechsel im Log und der Rückweg aus der Serienauswahl erscheinen als Schaltflächen mit diesen gemeinsamen Farben.
+
+| Zustand | Fläche | Kontur | Schrift |
+| --- | --- | --- | --- |
+| Normal | `#262626` | `#6b6b6b` | `#d0d0d0` |
+| Hover | `#333333` | `#909090` | `#f0f0f0` |
+| Gedrückt | `#1f1f1f` | `#a5a5a5` | `#f0f0f0` |
+| Ausgewählt oder aufgeklappt | `#3b3b3b` | `#858585` | `#f0f0f0` |
+| Ausgewählt mit Hover | `#484848` | `#909090` | `#f0f0f0` |
+| Deaktiviert | `#1d1d1d` | `#3b3b3b` | `#808080` |
+
+Buttons, Eingabefelder, Auswahllisten und Qualitätslinks verwenden die normale Fläche und Kontur. Für Navigation, aufklappbare Beschriftungen und Historienfilter ist der nicht ausgewählte Grundzustand transparent. Hover, Druck und Auswahl verwenden dieselben Zustandsfarben wie die übrigen Bedienelemente. Reine Textlinks behalten ihre Unterstreichung und erhalten dieselben Hover- und Druckfarben.
+
+Tastaturfokus erhält durchgängig eine 2 Pixel starke Markierung in `#c5c5c5` mit 3 Pixeln Abstand. Bei umrandeten Elementen erhält auch die Kontur diese Farbe. Deaktivierte Elemente verwenden eigene Farben und reagieren optisch nicht auf Hover oder Druck. Die Historienfilter behalten native Checkboxen als Bedienelemente. Ihre sichtbare Fläche und ihr Häkchen verwenden die gemeinsame Palette. Im erzwungenen Kontrastmodus übernimmt der Browser ihre Darstellung.
+
+Die Eckenradien folgen vier zentralen Rollen aus [_theme.html](../src/newtvshowsng2/templates/_theme.html). Komponenten verwenden diese Variablen statt eigener Zahlenwerte.
+
+| Rolle | Variable | Wert | Verwendung |
+| --- | --- | --- | --- |
+| Detail | `--radius-detail` | 3 Pixel | Status-Badges, Logstufen, Qualitätslinks und Serienposter |
+| Bedienelement | `--radius-control` | 6 Pixel | Schaltflächen, Eingabefelder und Auswahllisten |
+| Fläche | `--radius-surface` | 10 Pixel | Panels, mobile Eintragskarten, Meldungen, Filter, Serienauswahl und Navigationsleiste |
+| Kapsel | `--radius-pill` | 999 Pixel | Navigationseinträge |
+
+Die Stufen unterscheiden kleine Details, bedienbare Elemente und übergeordnete Flächen. Der Kapselradius kennzeichnet die Navigation als zusammengehörige Auswahl.
 
 Eine Systemschrift trägt Überschriften, Beschriftungen und Inhalte. Technische Kennungen und Tracebacks verwenden eine Schrift mit fester Zeichenbreite. Zahlen in Bestands- und Datumsfeldern nutzen gleich breite Ziffern. Überschriften und grössere Gruppen erhalten mehr Abstand, während zusammengehörige Informationen dicht beieinander bleiben.
 
-Produktname und Hauptnavigation teilen sich am Desktop eine kompakte Kopfzeile. Das Monogramm bleibt zurückhaltend. Seitenüberschriften verwenden eine Schriftgrösse von 1,25 rem. In schmalen Fenstern rückt die Navigation unter den Produktnamen. Die gemeinsame Kopfzeile bleibt beim Scrollen erreichbar.
+Die Hauptnavigation steht in einer kompakten, dunkelgrauen Leiste mit feiner Kontur. Die aktive Ansicht erhält eine etwas hellere, abgerundete Kapsel. Produktname und Monogramm entfallen in der Kopfzeile. In schmalen Fenstern bleiben alle vier Ansichten mit kleineren Abständen in einer Zeile erreichbar. Die gemeinsame Kopfzeile bleibt beim Scrollen erreichbar. Feed, Medienimport, Historie und Log zeigen keine zusätzliche sichtbare Seitenüberschrift. Ihre Überschriften bleiben für assistive Technik verfügbar. Serienauswahl und Fehlerseiten verwenden weiterhin sichtbare Überschriften mit einer Schriftgrösse von 1,25 rem.
 
 In der Feedansicht sind Bestand und die Anzahl bekannter fehlender Folgen direkt sichtbar. Die zusätzliche Gesehen-Zahl entfällt in Feed und Historie. Qualitätsvarianten stehen als direkte Links unter dem Serientitel. Der vollständige Veröffentlichungstitel steht am jeweiligen Link als Titelhinweis bereit. Auf Wunsch des Auftraggebers entfällt der zusätzliche aufklappbare Variantenbereich. Die festgelegten gleichen Zeilenhöhen und der Zugang zu langen Inhalten bleiben erhalten.
 
-Besuchte Variantenlinks erhalten eine hellgraue Füllung mit dunkler Schrift. Noch nicht besuchte Varianten bleiben dunkel und umrandet. Die Kennzeichnung verwendet den Browserverlauf und bleibt auch beim Überfahren des Links erkennbar. Sie beschreibt ausschliesslich den Linkbesuch.
+Besuchte Variantenlinks erhalten eine hellgraue Füllung mit dunkler Schrift aus `--control-visited` und `--control-on-visited`. Beim Überfahren wird die Fläche mit `--control-visited-hover` etwas heller. Noch nicht besuchte Varianten verwenden die normalen Bedienelementfarben. Die Kennzeichnung verwendet den Browserverlauf und bleibt auch beim Überfahren und Drücken des Links erkennbar. Sie beschreibt ausschliesslich den Linkbesuch.
 
 ## Serienauswahl und Importumfang
 
@@ -28,11 +52,13 @@ Diese Vorschau ist flüchtig. Sie erzeugt keine zusätzliche persistente Datenha
 
 ## Laufende Vorgänge
 
-Ein manueller Feed-Abgleich oder Medienimport lädt das Dokument nicht automatisch neu. Das von derselben Anwendung gelieferte [Skript](../src/newtvshowsng2/static/ui.js) liest während eines laufenden Vorgangs die bereits erzeugte Hauptseite in Abständen von drei Sekunden. Es aktualisiert ausschliesslich die Statusfelder und die Verfügbarkeit der Startaktionen. Tabellen, Historienfilter, Scrollposition und Tastaturfokus bleiben bestehen.
+Die Kopfbereiche von Feed, Medienimport und Historie zeigen keine Eintragszahlen, Statuspunkte oder Angaben zum nächsten Lauf. Hinweise zu laufenden Vorgängen sowie Fehler- und Warnmeldungen stehen im jeweiligen Inhaltsbereich.
 
-Das Diagnoselog zeigt keinen zusätzlichen Stand oder Aktualisierungshinweis im Seitenkopf. Zeitangaben der einzelnen Meldungen, Filter und die ausdrückliche Aktualisierung bleiben verfügbar.
+Ein manueller Feed-Abgleich oder Medienimport lädt das Dokument nicht automatisch neu. Das von derselben Anwendung gelieferte [Skript](../src/newtvshowsng2/static/ui.js) liest während eines laufenden Vorgangs die bereits erzeugte Hauptseite in Abständen von drei Sekunden. Es aktualisiert ausschliesslich die Laufhinweise und die Verfügbarkeit der Startaktionen. Tabellen, Historienfilter, Scrollposition und Tastaturfokus bleiben bestehen.
 
-Jeder aus einer Logdatei gelesene Eintrag bietet «Original anzeigen». Der aufklappbare Bereich enthält den vollständigen Text mit ursprünglichem Zeitstempel, Logstufe, Quelle und allen Folgezeilen. Einrückungen und Zeilenenden bleiben beim Einlesen erhalten. Der Text wird für HTML maskiert und innerhalb des Bereichs gescrollt. Die strukturierte Ansicht berücksichtigt weiterhin die aktuelle Datei und vorhandene rotierte Dateien.
+Das Diagnoselog zeigt keine zusätzliche Sortierzeile, keinen Stand und keine Angabe zum ältesten gespeicherten Eintrag im Seitenkopf. Zeitangaben der einzelnen Meldungen, Filter und die ausdrückliche Aktualisierung bleiben verfügbar.
+
+Die strukturierte Logansicht zeigt Zeitstempel, Logstufe, Meldung und Quelle jeweils einmal. Sie berücksichtigt die aktuelle Datei und vorhandene rotierte Dateien. Die vollständige aktuelle Logdatei ist über die Schaltfläche «Raw-Log öffnen» verfügbar.
 
 «Raw-Log öffnen» öffnet ausschliesslich die aktuelle Logdatei unter /log/raw als reine Textdatei in einem neuen Tab. Die Antwort enthält die unveränderten Dateibytes ohne Filter, Umsortierung oder rotierte Dateien. Eine leere Datei ergibt eine leere Antwort. Bei einer fehlenden oder nicht lesbaren Datei erscheint eine Fehlerseite mit Rückweg zum Log. Beide Ansichten lesen nur die konfigurierte Logdatei beziehungsweise die bekannten Rotationen und verändern keine Dateien.
 

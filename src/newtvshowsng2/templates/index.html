@@ -11,37 +11,22 @@
   {% include "_theme.html" %}
   <style>
 
-    .scan-state { display: inline-flex; align-items: center; gap: 8px; color: var(--text); white-space: nowrap; }
-    .scan-state::before { width: 8px; height: 8px; border-radius: 50%; background: var(--success); content: ""; }
-    .scan-state.warning::before { background: var(--warning); }
-    .scan-state.error::before { background: var(--danger); }
-    .scan-state.running::before { background: var(--accent); }
-    .next-run { white-space: nowrap; }
-
     .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 0 24px; }
     .actions form { margin: 0; }
-    .actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     [hidden] { display: none !important; }
     .run-feedback p { margin: 0 0 8px; }
     .run-feedback form { margin: 0; }
-    .run-feedback button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-    .action-status { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px 18px; margin-left: auto; color: var(--muted); font-size: .8125rem; text-align: right; }
     .history-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin: -6px 0 18px; padding: 0; border: 0; }
     .history-filters legend { margin-bottom: 7px; color: var(--muted); font-size: .8125rem; }
     .history-filters label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: .85rem; }
-    .history-filters input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); }
+    .history-filters input { width: 17px; height: 17px; margin: 0; }
     .history-filter-empty { display: none; }
     #history-view:has(#history-filter-feed:not(:checked)) .history-feed,
     #history-view:has(#history-filter-import:not(:checked)) .history-import { display: none; }
     #history-view:has(#history-filter-feed:not(:checked)):has(#history-filter-import:not(:checked)) .history-panel { display: none; }
     #history-view:has(#history-filter-feed:not(:checked)):has(#history-filter-import:not(:checked)) .history-filter-empty { display: block; }
-    .nav a[href="#overview"],
-    body:has(#history:target) .nav a[href="#history"],
-    body:has(#media-import:target) .nav a[href="#media-import"] { background: transparent; color: var(--text); box-shadow: inset 0 -2px var(--accent); }
-    body:has(#history:target) .nav a[href="#overview"],
-    body:has(#media-import:target) .nav a[href="#overview"] { background: transparent; color: var(--muted); box-shadow: none; }
 
-    .alert { margin: 0 0 18px; padding: 18px 20px; border: 1px solid #63513a; border-radius: 8px; background: var(--warning-soft); color: var(--warning); }
+    .alert { margin: 0 0 18px; padding: 18px 20px; border: 1px solid #63513a; border-radius: var(--radius-surface); background: var(--warning-soft); color: var(--warning); }
     .alert.error { border-color: #704d47; background: var(--danger-soft); color: var(--danger); }
     .alert.run-feedback { border-color: #585858; background: var(--accent-soft); color: var(--text); }
     .alert strong { display: block; margin-bottom: 2px; }
@@ -54,10 +39,7 @@
     body:has(#media-import:target) #overview-view { display: none; }
     body:has(#history:target) #history-view,
     body:has(#media-import:target) #media-import-view { display: block; }
-    .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
-    .section-heading h1 { margin: 0; }
-    .count { flex: 0 0 auto; color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
-    .panel { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+    .panel { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
     .panel.current { border-color: #414141; }
     .table-wrap { overflow-x: auto; scrollbar-color: var(--border) var(--surface); }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -66,8 +48,6 @@
     tbody tr:last-child td { border-bottom: 0; }
     tbody tr:hover { background: var(--surface-hover); }
     .release { width: 46%; overflow-wrap: anywhere; font-size: .9375rem; font-weight: 600; }
-    .release a { color: var(--link); }
-    .release a:visited { color: var(--visited); }
     .release-title { display: block; }
     .release-content .release-title { max-height: 2.8em; overflow: auto; scrollbar-width: thin; }
     .release-table tbody td { padding-top: 18px; padding-bottom: 18px; }
@@ -75,7 +55,7 @@
     .release-table .cell-content { height: 90px; overflow: auto; scrollbar-width: thin; }
     .release-table .inventory .cell-content { font-size: .9375rem; line-height: 1.5; }
     .release-layout { display: flex; align-items: flex-start; gap: 14px; height: 90px; }
-    .series-poster { flex: 0 0 56px; width: 56px; height: 84px; object-fit: cover; border-radius: 4px; background: #252525; }
+    .series-poster { flex: 0 0 56px; width: 56px; height: 84px; object-fit: cover; border-radius: var(--radius-detail); background: #252525; }
     .release-content { flex: 1; min-width: 0; max-height: 90px; overflow: auto; scrollbar-width: thin; line-height: 1.4; }
     .release-table .variant-links { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 3px; scrollbar-width: thin; }
     .release-table .variant-links a { flex: 0 0 auto; }
@@ -83,11 +63,7 @@
     .release-table .badge-row { min-height: 0; overflow: auto; scrollbar-width: thin; }
     .release-table .complete-action { flex: 0 0 auto; margin-top: 0; }
     .variant-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    /* Ein deckender Grund erlaubt auch Firefox die Hintergrundfarbe besuchter Links. */
-    .variant-links a { padding: 3px 9px; border: 1px solid #4b4b4b; border-radius: 4px; background: var(--surface); color: var(--link); font-size: .75rem; font-weight: 500; text-decoration: none; }
-    .variant-links a:visited { color: #161616; background-color: #c5c5c5; border-color: #c5c5c5; }
-    .variant-links a:hover { background: var(--control-hover); text-decoration: underline; }
-    .variant-links a:visited:hover { color: #121212; background-color: #dedede; border-color: #dedede; }
+    .variant-links a { padding: 3px 9px; border-radius: var(--radius-detail); font-size: .75rem; font-weight: 500; text-decoration: none; }
     .type-marker { display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; color: var(--muted); font-size: .75rem; font-weight: 500; }
     .type-marker svg { width: 14px; height: 14px; flex: 0 0 auto; }
     .inventory { width: 20%; white-space: nowrap; }
@@ -98,9 +74,8 @@
     .date-col { width: 20%; color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
     .badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
     .complete-action { margin: 10px 0 0; }
-    .complete-action button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-    .badge { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border: 1px solid transparent; border-radius: var(--radius-badge); font-size: .75rem; font-weight: 500; line-height: 1.2; }
-    .badge.new { background: var(--accent-soft); color: var(--link); }
+    .badge { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border: 1px solid transparent; border-radius: var(--radius-detail); font-size: .75rem; font-weight: 500; line-height: 1.2; }
+    .badge.new { background: var(--info-soft); color: var(--info); }
     .badge.open, .badge.warning { background: var(--warning-soft); color: var(--warning); }
     .badge.done { background: var(--success-soft); color: var(--success); }
     .badge.blocked { background: var(--danger-soft); color: var(--danger); }
@@ -112,13 +87,12 @@
 
     @media (max-width: 760px) {
       .shell { width: min(100% - 24px, 680px); padding-top: 16px; }
-      .section-heading { align-items: flex-start; }
       .panel { overflow: visible; border: 0; background: transparent; }
       .table-wrap { overflow: visible; }
       table, thead, tbody, tr, th, td { display: block; width: 100% !important; }
       thead { position: absolute; width: 1px !important; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
       tbody { display: grid; gap: 10px; }
-      tr { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+      tr { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
       .current tr { border-color: #414141; }
       td { display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 10px; padding: 6px 0; border: 0; white-space: normal; }
       td::before { color: var(--muted); content: attr(data-label); font-size: .68rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
@@ -138,8 +112,6 @@
       .release-table .date-col .cell-content { height: 24px; }
     }
     @media (max-width: 470px) {
-      .next-run { white-space: normal; }
-      .action-status { width: 100%; justify-content: flex-start; margin-left: 0; text-align: left; }
       td { grid-template-columns: 88px minmax(0, 1fr); }
     }
   </style>
@@ -149,46 +121,18 @@
     {% set scan_status = state.get('scan_status', 'starting') %}
     {% set import_status = state.get('manual_import_status') %}
     {% set busy = scan_status == 'running' or import_status == 'running' %}
-    {% macro feed_state() %}
-      <span class="scan-state {{ scan_status }}">
-        {% if scan_status == 'running' %}Scan läuft
-        {% elif scan_status == 'warning' %}Scan mit Warnung
-        {% elif scan_status == 'error' %}Scan fehlgeschlagen
-        {% elif scan_status == 'ok' %}Aktuell
-        {% else %}Wird vorbereitet{% endif %}
-      </span>
-    {% endmacro %}
-    <header class="topbar">
-      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">N</span>NewTVShowsNG2</a>
-      <nav class="nav" aria-label="Ansichten">
-        <a href="#overview">Feed</a>
-        <a href="#media-import">Medienimport</a>
-        <a href="#history">Historie</a>
-        <a href="/log">Log</a>
-      </nav>
-    </header>
+    {% set navigation_page = 'index' %}
+    {% include "_navigation.html" %}
     <span class="tab-anchor" id="overview" aria-hidden="true"></span>
     <span class="tab-anchor" id="history" aria-hidden="true"></span>
     <span class="tab-anchor" id="media-import" aria-hidden="true"></span>
 
     <section class="view" id="media-import-view" aria-labelledby="media-import-title">
-      <div class="section-heading">
-        <div>
-          <h1 id="media-import-title">Medienimport</h1>
-        </div>
-        <span class="count">{{ media_imports | length }} Einträge</span>
-      </div>
+      <h1 class="visually-hidden" id="media-import-title">Medienimport</h1>
       {% if media_import_enabled %}
         <div class="actions" aria-label="Medienimport-Aktionen">
           <form method="post" action="/run/income-scan"><button type="submit" data-run-start {% if busy %}disabled{% endif %}>Download jetzt scannen</button></form>
           <form method="post" action="/run/import"><button type="submit" data-run-start {% if busy %}disabled{% endif %}>Dateien jetzt einsortieren</button></form>
-          <div class="action-status" data-live-status="import">
-            {% if import_status == 'running' %}<span class="scan-state running">Import läuft</span>
-            {% elif state.get('automatic_import_error') %}<span class="scan-state error">Automatischer Import fehlgeschlagen</span>
-            {% elif import_status == 'error' %}<span class="scan-state error">Letzter manueller Import fehlgeschlagen</span>
-            {% elif import_status == 'warning' %}<span class="scan-state warning">Letzter manueller Import mit Warnung</span>
-            {% else %}<span class="scan-state">Import bereit</span>{% endif %}
-          </div>
         </div>
       {% endif %}
       <div class="alert run-feedback" role="status" data-run-feedback="import" data-running="{{ 'true' if import_status == 'running' else 'false' }}" {% if import_status != 'running' %}hidden{% endif %}>
@@ -241,7 +185,7 @@
                       <div>
                       {{ item.reason or 'Wartet auf Importprüfung' }}
                       {% if media_import_enabled and item.status == 'needs_selection' %}
-                        <br><a href="/media-import/resolve?source={{ item.source_path | urlencode }}">Serie zuordnen</a>
+                        <br><a class="button" href="/media-import/resolve?source={{ item.source_path | urlencode }}">Serie zuordnen</a>
                       {% endif %}
                       </div>
                     </td>
@@ -368,18 +312,9 @@
     {% endmacro %}
 
     <section class="view" id="overview-view" aria-labelledby="current-title">
-      <div class="section-heading">
-        <div>
-          <h1 id="current-title">Aktuell fehlend</h1>
-        </div>
-        <span class="count">{{ current | length }} Einträge</span>
-      </div>
+      <h1 class="visually-hidden" id="current-title">Aktuell fehlend</h1>
       <div class="actions" aria-label="Feed-Aktionen">
         <form method="post" action="/run/feed"><button type="submit" data-run-start {% if busy %}disabled{% endif %}>Feed jetzt abgleichen</button></form>
-        <div class="action-status" data-live-status="feed-overview">
-          {{ feed_state() }}
-          <span class="next-run">Nächster Lauf: {{ state.get('next_run_at') | local_datetime }}</span>
-        </div>
       </div>
       {% if state.get('last_error') %}
         <div class="alert error" role="alert">
@@ -396,18 +331,7 @@
     </section>
 
     <section class="view" id="history-view" aria-labelledby="history-title">
-      <div class="section-heading">
-        <div>
-          <h1 id="history-title">Historie</h1>
-        </div>
-        <span class="count">{{ history | length }} Einträge gesamt</span>
-      </div>
-      <div class="actions" aria-label="Feed-Status">
-        <div class="action-status" data-live-status="feed-history">
-          {{ feed_state() }}
-          <span class="next-run">Nächster Lauf: {{ state.get('next_run_at') | local_datetime }}</span>
-        </div>
-      </div>
+      <h1 class="visually-hidden" id="history-title">Historie</h1>
       <div class="alert run-feedback" role="status" data-results-available hidden>
         <p>Der Lauf ist beendet. Lade die neuen Ergebnisse mit «Ansicht aktualisieren».</p>
         <form method="get" action="/#history"><button type="submit">Ansicht aktualisieren</button></form>

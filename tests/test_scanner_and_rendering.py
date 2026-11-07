@@ -337,7 +337,6 @@ def test_release_variants_stay_stored_but_are_grouped_in_current_view(
     html = cfg.output_path.read_text(encoding="utf-8")
     current_html, history_html = release_views(html)
     assert current_html.count('data-label="Release"') == 1
-    assert "1 Einträge" in current_html
     assert f">The Walking Dead: Dead City · {marker}</span>" in current_html
     assert ">720p</a>" in current_html
     assert ">1080p</a>" in current_html
@@ -351,7 +350,6 @@ def test_release_variants_stay_stored_but_are_grouped_in_current_view(
     for section in (current_html, history_html):
         assert section.count("<th class=") == 4
         assert "Jellyfin-Serie" not in section
-    assert "2 Einträge" in history_html
 
 
 def test_open_imports_and_transfers_render_in_separate_views_with_timeline(tmp_path) -> None:
@@ -398,13 +396,11 @@ def test_open_imports_and_transfers_render_in_separate_views_with_timeline(tmp_p
     media_html = html.split('id="media-import-view"', 1)[1].split("</section>", 1)[0]
     history_html = html.split('id="history-view"', 1)[1].split("</section>", 1)[0]
 
-    assert "3 Einträge" in media_html
     assert all(
         source in media_html
         for source in ("waiting.mkv", "blocked.mkv", "selection.mkv")
     )
     assert "older.mkv" not in media_html and "newer.mkv" not in media_html
-    assert "3 Einträge" in history_html
     assert (
         history_html.index("newer.mkv")
         < history_html.index("The Walking Dead: Dead City")
@@ -441,9 +437,8 @@ def test_ui_labels_and_link_states_render_consistently(tmp_path) -> None:
     assert "Download ist leer" in html
     assert "Keine offenen Importe" in html
     assert 'class="section-note"' not in html
-    assert "--link: #d0d0d0" in html
     assert "--visited: #b0b0b0" in html
-    assert ".release a:visited { color: var(--visited); }" in html
+    assert "a:visited { color: var(--visited); }" in html
     assert ".variant-links a:visited {" in html
 
     selection_html = renderer.render_selection(
