@@ -21,3 +21,5 @@ Das [README](README.md) enthält ausschliesslich ein Docker-Compose-Beispiel und
 Vor Änderungen am Jellyfin-Client die [API Referenz](docs/jellyfin-api.md) lesen und Endpunkte, Parameter und Antwortfelder anhand der passenden offiziellen Spezifikation prüfen. Keine Endpunkte oder deren Wirkung erraten.
 
 Prüfungen passend zur Änderung ausführen. Bei Dokumentationsänderungen lokale Links und Konfigurationsbeispiele prüfen. Bei Änderungen an Importen oder API-Aufrufen insbesondere Fehlerfälle, mehrdeutige Zuordnungen, bestehende Ziele und den Erhalt der Quelldaten prüfen.
+
+Bei GUI-Anpassungen die [lokale Gestaltungsvorschau](docs/ui-preview.md) starten und die betroffenen Ansichten im Browser prüfen. Dem Benutzer zum Abschluss immer den Link zur laufenden Vorschau nennen. Nach Änderungen am Python-Code die Vorschau neu starten. Beispieldaten verwenden ausschliesslich erfundene Serientitel und lokal gespeicherte, eigens generierte Poster.

@@ -91,12 +91,12 @@ Die Prüfungen für geänderte Quellen, aktuelle Zuordnungen und bestehende Ziel
 
 ## Lokale Gestaltungsvorschau
 
-Die [Vorschau](../scripts/preview_ui.py) verwendet erzeugte Beispieldaten mit den bestehenden Templates. Sie lässt sich aus dem Projektverzeichnis starten:
+Die [Vorschau](../scripts/preview_ui.py) verwendet erfundene Serien und lokal gespeicherte, generierte Poster mit den aktuellen Templates. Sie lässt sich aus dem Projektverzeichnis starten:
 
 ```sh
-PYTHONPATH=src .venv/bin/python scripts/preview_ui.py
+.venv/bin/python scripts/preview_ui.py
 ```
 
 Unter `http://127.0.0.1:28733/preview` stehen alle Beispielansichten bereit. Feed, Import und Historie zeigen die vorhandenen Badge- und Tabellenaktionsvarianten. Das Log enthält alle fünf Logstufen und Seitenwechsel. Die Serienzuordnung zeigt mehrere Treffer, Providerangaben und Bestätigungsbuttons. Ergänzende Ansichten zeigen laufende Vorgänge, deaktivierte Aktionen, Fehlermeldungen und leere Ergebnisse. Formularaktionen öffnen eine Musterrückmeldung. Die Beispieldaten und Rückmeldungen bleiben von den betrieblichen Abläufen getrennt.
 
-Ein anderer lokaler Port lässt sich mit `--port 28734` wählen.
+Die [Anleitung zur Gestaltungsvorschau](ui-preview.md) beschreibt Einrichtung, Aktualisierung und Erweiterung der Beispieldaten. Bei GUI-Anpassungen wird die Vorschau gestartet und der Link dem Benutzer genannt.
