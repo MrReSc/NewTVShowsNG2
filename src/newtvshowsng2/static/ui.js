@@ -58,6 +58,86 @@
 })();
 
 (() => {
+  const form = document.querySelector('[data-log-filters]');
+  if (!form) return;
+  const results = document.querySelector('[data-log-results]');
+  const count = document.querySelector('[data-log-count]');
+  const refresh = document.querySelector('.log-actions .refresh');
+  const search = form.elements.namedItem('q');
+  let timer;
+  let request = null;
+  let composing = false;
+
+  function cancelPending() {
+    clearTimeout(timer);
+    request?.abort();
+    request = null;
+    results.removeAttribute('aria-busy');
+  }
+
+  async function applyFilters() {
+    const url = new URL(form.action);
+    url.search = new URLSearchParams(new FormData(form)).toString();
+    const current = new AbortController();
+    request = current;
+    const timeout = setTimeout(() => current.abort(), 10000);
+    results.setAttribute('aria-busy', 'true');
+    count.textContent = 'Log wird gefiltert.';
+    try {
+      const response = await fetch(url, { cache: 'no-store', signal: current.signal });
+      if (!response.ok) throw new Error('Log nicht verfügbar');
+      const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+      if (request !== current) return;
+      const incoming = page.querySelector('[data-log-results]');
+      const incomingCount = page.querySelector('[data-log-count]');
+      const incomingRefresh = page.querySelector('.log-actions .refresh');
+      if (!incoming || !incomingCount || !incomingRefresh) throw new Error('Log unvollständig');
+
+      // Nur Ergebnisse ersetzen, damit Fokus und Textauswahl im Suchfeld erhalten bleiben.
+      results.replaceChildren(...incoming.childNodes);
+      count.textContent = incomingCount.textContent;
+      refresh.href = incomingRefresh.getAttribute('href');
+      history.replaceState(null, '', url);
+    } catch {
+      // Bei einem Abruffehler bleibt derselbe Filter über die normale GET-Seite erreichbar.
+      if (request === current) location.assign(url);
+    } finally {
+      clearTimeout(timeout);
+      if (request === current) {
+        request = null;
+        results.removeAttribute('aria-busy');
+      }
+    }
+  }
+
+  function schedule(delay = 0) {
+    cancelPending();
+    if (delay) timer = setTimeout(applyFilters, delay);
+    else applyFilters();
+  }
+
+  for (const select of form.querySelectorAll('select')) {
+    select.addEventListener('change', () => schedule());
+  }
+  search.addEventListener('input', event => {
+    if (composing || event.isComposing) cancelPending();
+    else schedule(search.value ? 350 : 0);
+  });
+  search.addEventListener('compositionstart', () => {
+    composing = true;
+    cancelPending();
+  });
+  search.addEventListener('compositionend', () => {
+    composing = false;
+    schedule(350);
+  });
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    if (!composing) schedule();
+  });
+})();
+
+(() => {
   const feedback = [...document.querySelectorAll('[data-run-feedback][data-running="true"]')];
   if (!feedback.length) return;
 

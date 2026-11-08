@@ -182,6 +182,7 @@ def test_server_serves_log_page(tmp_path) -> None:
         assert "form-action 'self'" in response.getheader("Content-Security-Policy")
         assert "font-src 'self'" in response.getheader("Content-Security-Policy")
         assert "script-src 'self'" in response.getheader("Content-Security-Policy")
+        assert "connect-src 'self'" in response.getheader("Content-Security-Policy")
         assert '<script src="/ui.js" defer></script>' in content
         assert "scan complete" in content
         connection.close()

@@ -73,11 +73,13 @@ Das Diagnoselog zeigt keine zusätzliche Sortierzeile, keinen Stand und keine An
 
 Die strukturierte Logansicht zeigt Zeitstempel, Logstufe, Meldung und Quelle jeweils einmal. Sie berücksichtigt die aktuelle Datei und vorhandene rotierte Dateien. Die vollständige aktuelle Logdatei ist über die Schaltfläche «Raw-Log öffnen» verfügbar.
 
+Zeitraum und Mindeststufe filtern das Log unmittelbar nach der Auswahl. Die Textsuche aktualisiert die Ergebnisse nach 350 Millisekunden Eingabepause. Das Leeren des Suchfelds und die Eingabetaste wirken sofort. Der Abruf ersetzt ausschliesslich die Ergebnisse und erhält Fokus sowie Textauswahl im Suchfeld. Filteränderungen beginnen auf der ersten Ergebnisseite. URL und Aktualisierungslink entsprechen den angewendeten Filtern. Neuere Eingaben verwerfen noch laufende Abrufe. Ohne JavaScript bleibt «Anzeigen» als Formularaktion verfügbar.
+
 «Raw-Log öffnen» öffnet ausschliesslich die aktuelle Logdatei unter /log/raw als reine Textdatei in einem neuen Tab. Die Antwort enthält die unveränderten Dateibytes ohne Filter, Umsortierung oder rotierte Dateien. Eine leere Datei ergibt eine leere Antwort. Bei einer fehlenden oder nicht lesbaren Datei erscheint eine Fehlerseite mit Rückweg zum Log. Beide Ansichten lesen nur die konfigurierte Logdatei beziehungsweise die bekannten Rotationen und verändern keine Dateien.
 
 Nach dem Lauf weist die Oberfläche auf neue Ergebnisse hin. «Ansicht aktualisieren» lädt diese ausdrücklich. Ohne JavaScript sowie bei einem fehlgeschlagenen Statusabruf steht dieselbe manuelle Aktualisierung bereit. Die Hauptseite erlaubt für das Skript und dessen Abrufe ausschliesslich denselben Ursprung.
 
-Alle HTML-Ansichten laden das gemeinsame UI-Skript für die Hover-Fläche und den aktuellen Navigationseintrag. Die Freigabe bleibt auf Skripte desselben Ursprungs beschränkt. Ausschliesslich die Hauptseite erlaubt zusätzlich den Statusabruf vom selben Ursprung.
+Alle HTML-Ansichten laden das gemeinsame UI-Skript für die Hover-Fläche und den aktuellen Navigationseintrag. Die Freigabe bleibt auf Skripte desselben Ursprungs beschränkt. Hauptseite und Log erlauben zusätzlich Abrufe vom selben Ursprung für den Laufstatus beziehungsweise die Filterergebnisse.
 
 Der Statusabruf startet keine Verarbeitung und fragt Jellyfin nicht nach fachlichen Bestandsinformationen ab. Er liest lediglich die bereits erzeugte HTML-Ausgabe. Die serverseitige Serialisierung bleibt massgebend, auch wenn eine ältere Browseransicht noch eine Startaktion anbietet.
 

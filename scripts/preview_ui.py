@@ -138,20 +138,23 @@ class PreviewData:
         level = query.get("level", ["DEBUG"])[0]
         if level not in LEVELS:
             level = "DEBUG"
-        search = query.get("q", [""])[0]
+        search = query.get("q", [""])[0].strip()[:200]
+        period = "7d" if query.get("period") == ["7d"] else "24h"
+        cutoff = self.now - timedelta(days=7 if period == "7d" else 1)
         entries = []
         messages = (
             "Beispiel: Serienabgleich vorbereitet", "Beispiel: Feed-Abgleich abgeschlossen",
             "Beispiel: Serienzuordnung muss geprüft werden", "Beispiel: Zieldatei ist bereits vorhanden",
             "Beispiel: Eingangsverzeichnis vorübergehend nicht erreichbar",
         )
-        for index in range(15):
+        for index in range(20):
             kind = index % len(LEVELS)
-            stamp = self.now - timedelta(minutes=index)
+            stamp = self.now - timedelta(minutes=index, days=2 if index >= 15 else 0)
             entry = dict(time=stamp.astimezone(ZoneInfo("Europe/Zurich")).strftime("%d.%m.%Y, %H:%M:%S %Z"),
                          iso_time=stamp.isoformat(), level=LEVELS[kind], source="newtvshowsng2.preview",
                          message=messages[kind], raw_text=messages[kind])
-            if kind >= LEVELS.index(level) and search.casefold() in entry["message"].casefold():
+            if (stamp >= cutoff and kind >= LEVELS.index(level)
+                    and search.casefold() in f"{entry['source']} {entry['message']}".casefold()):
                 entries.append(entry)
         try:
             requested = int(query.get("page", ["1"])[0])
@@ -159,7 +162,6 @@ class PreviewData:
             requested = 1
         page_count = max(1, (len(entries) + 4) // 5)
         page = max(1, min(requested, page_count))
-        period = "7d" if query.get("period") == ["7d"] else "24h"
 
         def page_url(number: int) -> str:
             return "/log?" + urlencode(dict(period=period, level=level, q=search, page=number))
