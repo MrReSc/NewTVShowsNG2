@@ -1,4 +1,63 @@
 (() => {
+  for (const nav of document.querySelectorAll('.nav')) {
+    const links = [...nav.querySelectorAll('a')];
+    let hovered = null;
+
+    function updateHover() {
+      if (!hovered || hovered.hasAttribute('aria-current')) {
+        nav.classList.remove('nav-hover-visible');
+        return;
+      }
+      const bounds = nav.getBoundingClientRect();
+      const target = hovered.getBoundingClientRect();
+      nav.style.setProperty('--nav-hover-left', `${target.left - bounds.left - nav.clientLeft}px`);
+      nav.style.setProperty('--nav-hover-width', `${target.width}px`);
+      if (!nav.classList.contains('nav-hover-visible')) {
+        // Beim ersten Eintritt beginnt die Bewegung direkt am angesteuerten Link.
+        getComputedStyle(nav, '::before').transform;
+      }
+      nav.classList.add('nav-hover-visible');
+    }
+
+    function updateCurrent() {
+      const view = ['#history', '#media-import'].includes(location.hash) ? location.hash : '#overview';
+      for (const link of links) {
+        const destination = new URL(link.href);
+        const current = destination.origin === location.origin
+          && destination.pathname.replace(/\/+$/, '') === location.pathname.replace(/\/+$/, '')
+          && (!destination.hash || destination.hash === view);
+        if (current) link.setAttribute('aria-current', 'page');
+        else link.removeAttribute('aria-current');
+      }
+      updateHover();
+    }
+
+    function clearHover() {
+      hovered = null;
+      updateHover();
+    }
+
+    for (const link of links) {
+      link.addEventListener('pointerenter', event => {
+        if (event.pointerType === 'touch') return;
+        hovered = link;
+        updateHover();
+      });
+    }
+    nav.addEventListener('pointerleave', clearHover);
+    nav.addEventListener('pointercancel', clearHover);
+    window.addEventListener('blur', clearHover);
+    window.addEventListener('hashchange', updateCurrent);
+    window.addEventListener('pageshow', updateCurrent);
+    const observer = new ResizeObserver(updateHover);
+    observer.observe(nav);
+    for (const link of links) observer.observe(link);
+    nav.classList.add('nav-enhanced');
+    updateCurrent();
+  }
+})();
+
+(() => {
   const feedback = [...document.querySelectorAll('[data-run-feedback][data-running="true"]')];
   if (!feedback.length) return;
 

@@ -1,3 +1,4 @@
+<script src="/ui.js" defer></script>
 <link rel="preload" href="/fonts/inter-4.1.woff2" as="font" type="font/woff2" crossorigin>
 <style>
   @font-face {
@@ -61,7 +62,6 @@
     --radius-detail: 3px;
     --radius-control: 6px;
     --radius-surface: 10px;
-    --radius-pill: 999px;
     --navigation-offset: 24px;
   }
   * { box-sizing: border-box; }
@@ -122,11 +122,7 @@
   input[type="checkbox"]:disabled { cursor: not-allowed; }
   details[open] > summary,
   input[type="checkbox"]:checked,
-  .history-filters label:has(input:checked),
-  .nav a[aria-current="page"],
-  body:not(:has(#history:target, #media-import:target)) .nav a[href="#overview"],
-  body:has(#history:target) .nav a[href="#history"],
-  body:has(#media-import:target) .nav a[href="#media-import"] {
+  .history-filters label:has(input:checked) {
     --interaction-fill: var(--control-selected);
     --interaction-border: var(--control-border-selected);
     --interaction-text: var(--control-text-hover);
@@ -139,8 +135,22 @@
   .shell { width: min(1320px, calc(100% - 64px)); margin: 0 auto; padding: var(--navigation-offset) 0 56px; }
   .topbar { position: sticky; z-index: 5; top: var(--navigation-offset); margin-bottom: 24px; padding-bottom: 12px; background: var(--background); }
   .topbar::before { position: absolute; inset: calc(-1 * var(--navigation-offset)) 0 100%; background: var(--background); pointer-events: none; content: ""; }
-  .nav { display: flex; gap: 4px; width: fit-content; max-width: 100%; margin: 0; padding: 5px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
-  .nav a { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 9px 17px; border-radius: var(--radius-pill); font-family: var(--font-interface); font-size: var(--type-label); font-weight: var(--weight-medium); line-height: var(--leading-compact); text-decoration: none; white-space: nowrap; }
+  .nav { --nav-inset: 5px; position: relative; isolation: isolate; display: flex; gap: 4px; width: fit-content; max-width: 100%; margin: 0; padding: var(--nav-inset); border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
+  .nav::before { position: absolute; z-index: 0; inset-block: var(--nav-inset); left: 0; width: var(--nav-hover-width, 0px); border-radius: var(--radius-control); background: var(--background); opacity: 0; transform: translateX(var(--nav-hover-left, 0px)); pointer-events: none; content: ""; transition: opacity 120ms ease-out; }
+  .nav.nav-hover-visible::before { opacity: 1; transition: transform 220ms cubic-bezier(.16, 1, .3, 1), width 220ms cubic-bezier(.16, 1, .3, 1), opacity 120ms ease-out; }
+  .nav a { --interaction-hover-fill: var(--background); position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 9px 17px; border-radius: var(--radius-control); font-family: var(--font-interface); font-size: var(--type-label); font-weight: var(--weight-medium); line-height: var(--leading-compact); text-decoration: none; white-space: nowrap; }
+  .nav a:is(:hover, :active) { border-color: transparent; background-color: var(--interaction-hover-fill); color: var(--interaction-text); }
+  .nav.nav-enhanced a:hover:not([aria-current="page"]) { background-color: transparent; }
+  .nav a[aria-current="page"],
+  body:not(:has(#history:target, #media-import:target)) .nav a[href="#overview"],
+  body:has(#history:target) .nav a[href="#history"],
+  body:has(#media-import:target) .nav a[href="#media-import"] {
+    --interaction-fill: var(--accent);
+    --interaction-border: transparent;
+    --interaction-text: var(--background);
+    --interaction-hover-fill: var(--text);
+    color: var(--interaction-text);
+  }
   button, .button, .return, .history-filters label { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 14px; border-radius: var(--radius-control); font-family: var(--font-interface); font-size: var(--type-label); font-weight: var(--weight-medium); line-height: var(--leading-compact); text-decoration: none; cursor: pointer; }
   .complete-action button, .button-compact { min-height: 32px; padding: 5px 10px; }
   .button-compact { white-space: nowrap; }
@@ -151,11 +161,15 @@
     .topbar { margin-bottom: 20px; }
   }
   @media (max-width: 470px) {
-    .nav { gap: 2px; padding: 4px; }
+    .nav { --nav-inset: 4px; gap: 2px; }
     .nav a { padding-inline: 6px; }
   }
   @media (forced-colors: active) {
+    .nav a[aria-current="page"] { outline: 1px solid Highlight; }
     input[type="checkbox"] { appearance: auto; }
     input[type="checkbox"]::before { content: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .nav::before, .nav.nav-hover-visible::before { transition: none; }
   }
 </style>

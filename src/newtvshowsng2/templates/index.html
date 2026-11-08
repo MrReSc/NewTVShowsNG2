@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#121212">
-  <script src="/ui.js" defer></script>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <title>NewTVShowsNG2</title>
   {% include "_theme.html" %}
@@ -42,7 +41,7 @@
     .panel.current { border-color: #414141; }
     .table-wrap { overflow-x: auto; scrollbar-color: var(--border) var(--surface); }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .release-table { --release-row-height: 5.25rem; }
+    .release-table { --release-row-height: 5.25rem; --release-poster-width: 3.5rem; --release-gap: 14px; }
     th, td { padding: 18px 20px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
     th { background: transparent; color: var(--text-secondary); font-size: var(--type-label); font-weight: var(--weight-medium); line-height: var(--leading-compact); }
     tbody tr:last-child td { border-bottom: 0; }
@@ -52,13 +51,15 @@
     .release-title { display: block; }
     .release-title :where(a) { color: var(--text); }
     .release-content .release-title { flex: 0 0 auto; max-width: 100%; min-height: calc(1em * var(--leading-compact)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Der fontbezogene Ausgleich richtet die sichtbare Schrift an der Bildkante aus. */
+    .release-content .release-title { margin-block-start: calc((1cap - 1lh) / 2); }
     .release-content .release-title:focus-within { overflow-x: auto; text-overflow: clip; scrollbar-width: none; }
     .release-table tbody td { padding-top: 18px; padding-bottom: 18px; }
     .release-table tbody tr:last-child td { border-bottom: 1px solid transparent; }
     .release-table .cell-content { height: var(--release-row-height); overflow: auto; scrollbar-width: thin; }
     .release-table .inventory .cell-content { font-size: var(--type-body); line-height: var(--leading-body); font-variant-numeric: lining-nums tabular-nums; }
-    .release-layout { display: flex; align-items: flex-start; gap: 14px; height: var(--release-row-height); }
-    .series-poster { flex: 0 0 3.5rem; width: 3.5rem; height: var(--release-row-height); object-fit: cover; border-radius: var(--radius-control); background: #252525; }
+    .release-layout { display: flex; align-items: flex-start; gap: var(--release-gap); height: var(--release-row-height); }
+    .series-poster { flex: 0 0 var(--release-poster-width); width: var(--release-poster-width); height: var(--release-row-height); object-fit: cover; border-radius: var(--radius-control); background: #252525; }
     .release-content { display: flex; flex-direction: column; justify-content: space-between; flex: 1; min-width: 0; height: var(--release-row-height); }
     .release-details { display: contents; font-weight: var(--weight-regular); }
     .release-table .variant-links { flex: 0 0 auto; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
@@ -111,7 +112,7 @@
       td::before { color: var(--muted); content: attr(data-label); font-size: var(--type-caption); font-weight: var(--weight-medium); line-height: var(--leading-compact); }
       td.release { display: block; padding: 0 0 10px; }
       td.release::before { display: none; }
-      .release-table tbody td { padding-top: 2px; padding-bottom: 2px; }
+      .release-table tbody td { grid-template-columns: var(--release-poster-width) minmax(0, 1fr); column-gap: var(--release-gap); padding-top: 2px; padding-bottom: 2px; }
       .release-table tbody tr { padding: 10px; }
       .release-table tbody tr:last-child td { border-bottom: 0; }
       .release-table td.release { padding-top: 0; padding-bottom: 8px; }

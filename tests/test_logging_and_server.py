@@ -181,6 +181,8 @@ def test_server_serves_log_page(tmp_path) -> None:
         assert response.getheader("Cache-Control") == "no-store"
         assert "form-action 'self'" in response.getheader("Content-Security-Policy")
         assert "font-src 'self'" in response.getheader("Content-Security-Policy")
+        assert "script-src 'self'" in response.getheader("Content-Security-Policy")
+        assert '<script src="/ui.js" defer></script>' in content
         assert "scan complete" in content
         connection.close()
         connection = http.client.HTTPConnection(*server.server_address, timeout=3)
@@ -304,6 +306,8 @@ def test_action_error_pages_escape_messages_and_keep_recovery_links(tmp_path) ->
                 assert response.getheader("Cache-Control") == "no-store"
                 assert "frame-ancestors 'none'" in response.getheader("Content-Security-Policy")
                 assert "font-src 'self'" in response.getheader("Content-Security-Policy")
+                assert "script-src 'self'" in response.getheader("Content-Security-Policy")
+                assert '<script src="/ui.js" defer></script>' in html
                 assert 'aria-label="Ansichten"' in html
                 assert f'href="{return_url}">{label}</a>' in html
                 assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
