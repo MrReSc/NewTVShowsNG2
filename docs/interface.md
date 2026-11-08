@@ -4,6 +4,8 @@ Die Oberfläche unterstützt die private Einzelnutzung am Desktop. Der bestätig
 
 ## Gestaltung
 
+Tabellenbuttons, Qualitätslinks, Status-Badges und Logstufen verwenden eine gemeinsame kompakte Geometrie aus dem Theme. Die Mindesthöhe beträgt 1,625 rem beziehungsweise 26 Pixel bei normaler Browserbasis. Schriftgrösse, Gewicht und Innenabstände sind mit 13 Pixeln, Gewicht 500 und 2 × 8 Pixeln einheitlich. Die Breite folgt der Beschriftung. Die feste Statusspalte von 16 rem hält die vorhandenen Beschriftungen am Desktop einzeilig. In mobilen Karten bleiben mehrere Statuswerte und eine anschliessende Aktion auf derselben horizontal scrollbar erreichbaren Zeile.
+
 Die vier HTML-Ansichten verwenden gemeinsame Farben, Schriftrollen, Navigation und Bedienelemente aus [_theme.html](../src/newtvshowsng2/templates/_theme.html). Flächen, Navigation, Links, Schaltflächen und Fokusmarkierungen verwenden Schwarz und neutrale Grautöne. Helligkeit und Konturen unterscheiden aktive Elemente. Blau kennzeichnet den Badge «Neu». Gelb, Rot und Grün bleiben den jeweiligen Warnungen, Fehlern und weiteren fachlichen Statuswerten vorbehalten.
 
 Alle anklickbaren Bedienelemente beziehen ihre Zustandsfarben aus derselben Graustufenpalette. Die gemeinsamen Regeln stehen in `_theme.html`. Die einzelnen Ansichten legen Grösse und Anordnung fest. Interne Aktionslinks wie «Serie zuordnen», «Raw-Log öffnen», Seitenwechsel im Log und der Rückweg aus der Serienauswahl erscheinen als Schaltflächen mit diesen gemeinsamen Farben.
@@ -86,3 +88,15 @@ Erwartbare Fehler bei Feedaktionen, Importen und Serienauswahlen behalten ihre H
 Eine Fehlermeldung behauptet weder eine abgeschlossene Dateiübernahme noch eine vollständige Rücknahme. Vor einer Wiederholung prüft der Nutzer den aktuellen Stand. Dies berücksichtigt auch Fehler bei der Ausgabe nach einer bereits gespeicherten Aktion.
 
 Die Prüfungen für geänderte Quellen, aktuelle Zuordnungen und bestehende Ziele liegen in [test_series_selection.py](../tests/test_series_selection.py). [test_logging_and_server.py](../tests/test_logging_and_server.py) prüft die Rückmeldungen, HTTP-Antworten, Sicherheitsheader und Rückwege mit isolierten Daten.
+
+## Lokale Gestaltungsvorschau
+
+Die [Vorschau](../scripts/preview_ui.py) verwendet erzeugte Beispieldaten mit den bestehenden Templates. Sie lässt sich aus dem Projektverzeichnis starten:
+
+```sh
+PYTHONPATH=src .venv/bin/python scripts/preview_ui.py
+```
+
+Unter `http://127.0.0.1:28733/preview` stehen alle Beispielansichten bereit. Feed, Import und Historie zeigen die vorhandenen Badge- und Tabellenaktionsvarianten. Das Log enthält alle fünf Logstufen und Seitenwechsel. Die Serienzuordnung zeigt mehrere Treffer, Providerangaben und Bestätigungsbuttons. Ergänzende Ansichten zeigen laufende Vorgänge, deaktivierte Aktionen, Fehlermeldungen und leere Ergebnisse. Formularaktionen öffnen eine Musterrückmeldung. Die Beispieldaten und Rückmeldungen bleiben von den betrieblichen Abläufen getrennt.
+
+Ein anderer lokaler Port lässt sich mit `--port 28734` wählen.

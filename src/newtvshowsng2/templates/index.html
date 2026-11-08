@@ -46,7 +46,7 @@
     th { background: transparent; color: var(--text-secondary); font-size: var(--type-label); font-weight: var(--weight-medium); line-height: var(--leading-compact); }
     tbody tr:last-child td { border-bottom: 0; }
     tbody tr:hover { background: var(--surface-hover); }
-    .release { width: 46%; overflow-wrap: anywhere; }
+    .release { width: auto; overflow-wrap: anywhere; }
     td.release { font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--leading-compact); }
     .release-title { display: block; }
     .release-title :where(a) { color: var(--text); }
@@ -68,7 +68,6 @@
     .release-table .badge-row { min-height: 0; overflow: auto; scrollbar-width: thin; }
     .release-table .complete-action { flex: 0 0 auto; margin-top: 0; }
     .variant-links { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
-    .variant-links a { padding: 3px 9px; border-radius: var(--radius-control); font-size: var(--type-caption); font-weight: var(--weight-medium); line-height: var(--leading-compact); text-decoration: none; }
     .type-marker { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: var(--type-caption); font-weight: var(--weight-regular); line-height: var(--leading-compact); }
     .type-marker svg { width: 14px; height: 14px; flex: 0 0 auto; }
     .inventory { width: 20%; white-space: normal; }
@@ -77,13 +76,13 @@
     #media-import-view .inventory { white-space: normal; overflow-wrap: anywhere; }
     .history-import .inventory { white-space: normal; overflow-wrap: anywhere; }
     .history-target { display: -webkit-box; max-height: calc(2em * var(--leading-body)); overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; }
-    .status-col { width: 14%; }
+    .status-col { width: 16rem; }
     .date-col { width: 20%; color: var(--text); font-size: var(--type-body); font-weight: var(--weight-regular); line-height: var(--leading-body); font-variant-numeric: lining-nums tabular-nums; }
     th.date-col { color: var(--text-secondary); font-size: var(--type-label); }
     #media-import-view .date-col { color: var(--text-secondary); font-size: var(--type-label); line-height: var(--leading-body); }
     .badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
     .complete-action { margin: 10px 0 0; }
-    .badge { display: inline-flex; align-items: center; width: fit-content; max-width: 100%; min-height: 26px; padding: 3px 8px; border: 1px solid transparent; border-radius: var(--radius-control); font-size: var(--type-caption); font-weight: var(--weight-medium); line-height: var(--leading-compact); }
+    .badge { width: fit-content; max-width: 100%; }
     .badge.new { background: var(--info-soft); color: var(--info); }
     .badge.open, .badge.warning { background: var(--warning-soft); color: var(--warning); }
     .badge.done { background: var(--success-soft); color: var(--success); }
@@ -108,7 +107,7 @@
       tbody { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
       tr { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
       .current tr { border-color: #414141; }
-      td { display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 10px; padding: 6px 0; border: 0; white-space: normal; }
+      td { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); gap: 14px; padding: 6px 0; border: 0; white-space: normal; }
       td::before { color: var(--muted); content: attr(data-label); font-size: var(--type-caption); font-weight: var(--weight-medium); line-height: var(--leading-compact); }
       td.release { display: block; padding: 0 0 10px; }
       td.release::before { display: none; }
@@ -117,13 +116,10 @@
       .release-table tbody tr:last-child td { border-bottom: 0; }
       .release-table td.release { padding-top: 0; padding-bottom: 8px; }
       .release-table .inventory .cell-content { height: 4.75rem; }
-      .release-table .status-col .cell-content { height: 2.125rem; flex-direction: row; align-items: flex-start; }
-      .release-table .status-col .badge-row { max-height: 2.125rem; }
+      .release-table .status-col .cell-content { height: calc(var(--control-compact-height) + 8px); flex-direction: row; align-items: flex-start; }
+      .release-table .status-col .badge-row { flex: 0 0 auto; flex-wrap: nowrap; max-height: var(--control-compact-height); overflow: visible; }
       .release-table .complete-action button { white-space: nowrap; }
       .release-table .date-col .cell-content { height: 1.75rem; }
-    }
-    @media (max-width: 470px) {
-      td { grid-template-columns: 88px minmax(0, 1fr); }
     }
   </style>
 </head>

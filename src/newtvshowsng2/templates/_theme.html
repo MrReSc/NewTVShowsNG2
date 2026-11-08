@@ -62,6 +62,7 @@
     --radius-detail: 3px;
     --radius-control: 6px;
     --radius-surface: 10px;
+    --control-compact-height: 1.625rem;
     --navigation-offset: 24px;
   }
   * { box-sizing: border-box; }
@@ -152,7 +153,8 @@
     color: var(--interaction-text);
   }
   button, .button, .return, .history-filters label { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 14px; border-radius: var(--radius-control); font-family: var(--font-interface); font-size: var(--type-label); font-weight: var(--weight-medium); line-height: var(--leading-compact); text-decoration: none; cursor: pointer; }
-  .complete-action button, .button-compact { min-height: 32px; padding: 5px 10px; }
+  .badge, .level, .variant-links a, .button-compact, table :is(button, .button) { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-compact-height); padding: 2px 8px; border-width: 1px; border-style: solid; border-radius: var(--radius-control); font-family: var(--font-interface); font-size: var(--type-caption); font-weight: var(--weight-medium); line-height: var(--leading-compact); text-decoration: none; white-space: nowrap; }
+  .badge, .level { border-color: transparent; }
   .button-compact { white-space: nowrap; }
   .run-feedback button { min-height: 34px; }
   @media (max-width: 760px) {

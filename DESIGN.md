@@ -167,9 +167,10 @@ components:
   button-compact:
     backgroundColor: '{colors.control}'
     textColor: '{colors.control-text}'
-    typography: '{typography.label}'
+    typography: '{typography.badge}'
     rounded: '{rounded.control}'
-    padding: 5px 10px
+    padding: 2px 8px
+    height: 1.625rem
   input:
     backgroundColor: '{colors.control}'
     textColor: '{colors.control-text}'
@@ -188,8 +189,20 @@ components:
     typography: '{typography.label}'
     rounded: '{rounded.control}'
     padding: 9px 17px
+  navigation-item-hover:
+    backgroundColor: '{colors.background}'
+    textColor: '{colors.control-text}'
+    typography: '{typography.label}'
+    rounded: '{rounded.control}'
+    padding: 9px 17px
   navigation-item-selected:
     backgroundColor: '{colors.accent}'
+    textColor: '{colors.background}'
+    typography: '{typography.label}'
+    rounded: '{rounded.control}'
+    padding: 9px 17px
+  navigation-item-selected-hover:
+    backgroundColor: '{colors.text}'
     textColor: '{colors.background}'
     typography: '{typography.label}'
     rounded: '{rounded.control}'
@@ -199,13 +212,15 @@ components:
     textColor: '{colors.control-text}'
     typography: '{typography.badge}'
     rounded: '{rounded.control}'
-    padding: 3px 9px
+    padding: 2px 8px
+    height: 1.625rem
   source-link-visited:
     backgroundColor: '{colors.control-visited}'
     textColor: '{colors.control-on-visited}'
     typography: '{typography.badge}'
     rounded: '{rounded.control}'
-    padding: 3px 9px
+    padding: 2px 8px
+    height: 1.625rem
   panel:
     backgroundColor: '{colors.surface}'
     textColor: '{colors.text}'
@@ -245,25 +260,29 @@ components:
     textColor: '{colors.info}'
     typography: '{typography.badge}'
     rounded: '{rounded.control}'
-    padding: 3px 8px
+    padding: 2px 8px
+    height: 1.625rem
   badge-success:
     backgroundColor: '{colors.success-soft}'
     textColor: '{colors.success}'
     typography: '{typography.badge}'
     rounded: '{rounded.control}'
-    padding: 3px 8px
+    padding: 2px 8px
+    height: 1.625rem
   badge-warning:
     backgroundColor: '{colors.warning-soft}'
     textColor: '{colors.warning}'
     typography: '{typography.badge}'
     rounded: '{rounded.control}'
-    padding: 3px 8px
+    padding: 2px 8px
+    height: 1.625rem
   badge-danger:
     backgroundColor: '{colors.danger-soft}'
     textColor: '{colors.danger}'
     typography: '{typography.badge}'
     rounded: '{rounded.control}'
-    padding: 3px 8px
+    padding: 2px 8px
+    height: 1.625rem
 ---
 
 # Designsystem: Neutrale Anwendungsoberfläche
@@ -278,7 +297,7 @@ Die visuelle Identität entsteht aus Inter, drei Texthelligkeiten, vier Schriftg
 
 ### Geltung und Übertragbarkeit
 
-Diese Spezifikation beschreibt das in NewTVShowsNG2 umgesetzte Design mit Stand 7. November 2026. Ihr allgemeiner Teil lässt sich auf andere datenorientierte Webanwendungen übertragen. Produktnamen, Datenquellen, fachliche Statusbedeutungen und konkrete Seitenabläufe werden im Zielprojekt separat festgelegt. Die hier gezeigten Komponenten benötigen kein bestimmtes Frontend-Framework.
+Diese Spezifikation beschreibt das in NewTVShowsNG2 umgesetzte Design mit Stand 8. November 2026. Ihr allgemeiner Teil lässt sich auf andere datenorientierte Webanwendungen übertragen. Produktnamen, Datenquellen, fachliche Statusbedeutungen und konkrete Seitenabläufe werden im Zielprojekt separat festgelegt. Die hier gezeigten Komponenten benötigen kein bestimmtes Frontend-Framework.
 
 Die YAML-Tokens am Dateianfang definieren die Werte. Die folgenden Abschnitte erklären ihre Anwendung. Die Abschnittstitel folgen dem [DESIGN.md-Format](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md). Die Sprache der fachlichen Beschriftungen kann im Zielprojekt angepasst werden.
 
@@ -414,7 +433,7 @@ Die Skala besteht aus vier Grössen. Pixelangaben beziehen sich auf eine Browser
 | Status | `badge` | 13 px / 0,8125 rem | 500 | 1,4 | Fachliche Statusfarbe |
 | Technische Kennung | `code` | 13 px / 0,8125 rem | 400 | 1,4 | Gedämpft, Monospace |
 
-Bestand, Datum und Uhrzeit verwenden dieselbe Datenrolle mit 16 px, Gewicht 400, Zeilenhöhe 1,6 und primärer Textfarbe. Wesentliche Daten werden nicht auf die Metadatenrolle verkleinert. Tabellenköpfe und Buttons verwenden die Bedienrolle. Formularlabels, Quellen, Dateiziele und der Erzeugungsstand verwenden die Metadatenrolle. Ein Episodencode ist eine ergänzende Angabe mit 14 px.
+Bestand, Datum und Uhrzeit verwenden dieselbe Datenrolle mit 16 px, Gewicht 400, Zeilenhöhe 1,6 und primärer Textfarbe. Wesentliche Daten werden nicht auf die Metadatenrolle verkleinert. Tabellenköpfe und Aktionen ausserhalb von Tabellen verwenden die Bedienrolle. Tabellenaktionen verwenden wie Badges die kompakte Statusrolle mit 13 px und Gewicht 500. Formularlabels, Quellen, Dateiziele und der Erzeugungsstand verwenden die Metadatenrolle. Ein Episodencode ist eine ergänzende Angabe mit 14 px.
 
 Es gibt genau drei reguläre Schriftgewichte. `strong` und `b` erhalten 500. Nur Überschriften verwenden 600. Die reguläre Oberfläche verwendet weder 700 noch 800. Eine neue Komponente übernimmt eine vorhandene Rolle.
 
@@ -500,6 +519,7 @@ Der folgende Block übernimmt die gemeinsamen Werte des Quellprojekts. Die Alias
   --radius-detail: 3px;
   --radius-control: 6px;
   --radius-surface: 10px;
+  --control-compact-height: 1.625rem;
   --navigation-offset: 24px;
 }
 
@@ -631,9 +651,9 @@ Die Zahl 5 ist eine lokale Ebenenentscheidung. Das Quellprojekt definiert keine 
 
 ### Bewegung und Rückmeldung
 
-Das bestehende Design verwendet keine CSS-Animationen und keine Übergangszeiten. Zustandsfarben ändern sich unmittelbar. Laufende Verarbeitung wird durch verständlichen Text und die Verfügbarkeit der Aktionen sichtbar. Die Oberfläche beginnt bereits sichtbar und ist nicht von einer Eintrittsanimation abhängig.
+Zustandsfarben ändern sich unmittelbar. Die Hover-Fläche der Navigation verwendet eine gezielte Bewegung, um den angesteuerten Eintrag von der aktiven Seite zu unterscheiden. Position und Breite wechseln über 220 ms mit `cubic-bezier(.16, 1, .3, 1)`. Das Ein- und Ausblenden dauert 120 ms mit `ease-out`. Bei `prefers-reduced-motion: reduce` entfallen diese Übergänge. Die vollständigen Zustände stehen unter [Navigation](#navigation).
 
-Für später ergänzte Bewegung sind Zweck, Dauer, Kurve und Verhalten bei reduzierter Bewegung gesondert festzulegen. Diese Spezifikation führt keine unbestätigten Motion-Tokens ein.
+Laufende Verarbeitung wird durch verständlichen Text und die Verfügbarkeit der Aktionen sichtbar. Die Oberfläche beginnt bereits sichtbar und ist nicht von einer Eintrittsanimation abhängig. Für weitere Bewegung sind Zweck, Dauer, Kurve und Verhalten bei reduzierter Bewegung gesondert festzulegen.
 
 ## Shapes
 
@@ -668,7 +688,7 @@ Buttons sind ruhig umrandet und in der neutralen Palette gehalten. Primäre und 
 | Variante | Schrift | Geometrie |
 | --- | --- | --- |
 | Standard | 14 px / 500 / 1,4 | Mindesthöhe 38 px, Innenabstand 8 px vertikal und 14 px horizontal |
-| Kompakt | 14 px / 500 / 1,4 | Mindesthöhe 32 px, Innenabstand 5 px vertikal und 10 px horizontal |
+| Kompakt in Tabellen | 13 px / 500 / 1,4 | Mindesthöhe 1,625 rem beziehungsweise 26 px, Innenabstand 2 px vertikal und 8 px horizontal |
 | Aktualisieren eines Laufhinweises | 14 px / 500 / 1,4 | Mindesthöhe 34 px, reguläre Button-Innenabstände |
 
 Alle Varianten verwenden 6 px Radius, 1 px Kontur und die Zustandswerte aus Colors. Links mit Aktionsdarstellung verwenden dieselbe Geometrie. Kompakte Beschriftungen bleiben einzeilig. Mindesthöhen sind Untergrenzen, keine festen Höhen. Wenn Schrift und Innenabstand mehr Platz benötigen, wächst das Element.
@@ -687,17 +707,31 @@ Die Filteraktionen stehen auf derselben unteren Linie wie die Felder. Fehler, Hi
 
 Die Navigationsleiste ist eine kompakte Fläche mit 10 px Radius, 1 px Kontur und 5 px Innenabstand. Zwischen den Einträgen liegen 4 px. Jeder Link verwendet 14 px, Gewicht 500, Mindesthöhe 44 px, Innenabstand 9 px vertikal und 17 px horizontal sowie den Bedienelementradius von 6 px.
 
+Die Leiste verwendet `surface` als Grundfläche und `border` als äussere Kontur. Ihre Breite folgt dem Inhalt und bleibt auf die verfügbare Breite begrenzt. Aktive Auswahl und Hover-Fläche verwenden dieselbe Geometrie wie die Links. Alle Zustände behalten ihre Abmessungen, damit Mausbewegungen keine Nachbareinträge verschieben.
+
+| Zustand | Fläche | Text | Kennzeichnung |
+| --- | --- | --- | --- |
+| Nicht aktiv | `transparent` | `control-text` | Keine sichtbare Linkkontur |
+| Nicht aktiv mit Hover oder Druck | `background`, `#121212` | `control-text`, `#c5c5c5` | Separate dunkle Hover-Fläche |
+| Aktiv | `accent`, `#c5c5c5` | `background`, `#121212` | Dauerhaft gefüllte Auswahl und `aria-current="page"` |
+| Aktiv mit Hover oder Druck | `text`, `#e0e0e0` | `background`, `#121212` | Hellere Auswahlfläche |
+| Tastaturfokus | Aktueller Zustand | Aktueller Zustand | 2 px Markierung in `control-focus` mit 3 px Abstand |
+
 Die aktive Ansicht erhält eine gefüllte hellgraue Fläche aus `accent` mit dunkler Schrift aus `background` und transparenter Kontur. Beim Überfahren wird ihre Fläche mit `text` etwas heller. Nicht aktive Einträge beginnen transparent. Eine separate dunkle Fläche aus `background` gleitet beim Überfahren zwischen ihnen und passt ihre Breite dem angesteuerten Link an. Die aktive Auswahl bleibt dabei an ihrem Ort und sichtbar. Hover und Auswahl verwenden keine eigene sichtbare Kontur.
 
 Die Hover-Fläche bewegt sich über 220 ms mit `cubic-bezier(.16, 1, .3, 1)` und blendet über 120 ms aus. Schnelle Mauswechsel dürfen die Bewegung unmittelbar umlenken. Beim Eintritt erscheint sie am angesteuerten Link. Beim Verlassen der Navigation und auf der aktiven Seite verschwindet sie. Touch löst keine Hover-Bewegung aus. Bei `prefers-reduced-motion: reduce` erfolgen alle Wechsel ohne Animation. Tastaturfokus bleibt unabhängig von der Hover-Fläche sichtbar.
 
+Die Hover-Fläche liegt unter den Links und nimmt keine Zeigerereignisse entgegen. Ihre Position und Breite folgen dem jeweiligen Link auch nach Änderungen der Schrift oder Fensterbreite. Die helle Auswahl liegt darüber und bleibt während der Bewegung sichtbar.
+
 Die aktive Seite wird zusätzlich über `aria-current="page"` gekennzeichnet. Im Quellprojekt ergänzen URL-Fragmente die Auswahl der Hauptansichten. Das gemeinsame UI-Skript aktualisiert den semantischen Zustand bei Fragmentwechseln und der Browsernavigation. Ohne Skript erhalten aktive und überfahrene Links dieselben Farben über CSS. Diese technische Zuordnung wird beim Übertragen durch das Routing des Zielprojekts ersetzt.
 
-Die Navigation bleibt in schmalen Fenstern eine Zeile. Bis 470 px gelten die unter Layout beschriebenen kleineren Abstände. Die vier Beschriftungen des Quellprojekts wurden bis 320 px geprüft. Eine andere Anzahl oder längere Beschriftungen benötigen eine eigene Platzprüfung.
+Die Navigation bleibt in schmalen Fenstern eine Zeile. Bis 470 px beträgt der Leisteninnenabstand 4 px, der Abstand zwischen Links 2 px und ihr seitlicher Innenabstand 6 px. Schriftgrösse, Mindesthöhe und Eckenradien bleiben gleich. Die vier Beschriftungen des Quellprojekts wurden bis 320 px geprüft. Eine andere Anzahl oder längere Beschriftungen benötigen eine eigene Platzprüfung.
+
+Die Referenzumsetzung besteht aus den Navigationsregeln in [_theme.html](src/newtvshowsng2/templates/_theme.html), dem semantischen Markup in [_navigation.html](src/newtvshowsng2/templates/_navigation.html) und dem Navigationsabschnitt in [ui.js](src/newtvshowsng2/static/ui.js). Die Begleitdatei `.impeccable/design.json` zeigt die Zustandsfarben als HTML- und CSS-Beispiel. Für die gleitende Hover-Fläche wird zusätzlich die dort verlinkte Skriptlogik benötigt.
 
 ### Status-Badges und Logstufen
 
-Status-Badges haben 6 px Radius, mindestens 26 px Höhe und 3 px vertikalen sowie 8 px horizontalen Innenabstand. Die Kontur ist 1 px transparent. Die Schrift verwendet 13 px, Gewicht 500 und Zeilenhöhe 1,4. Die Breite folgt dem Inhalt und überschreitet den verfügbaren Raum nicht. Ein Badge wird nicht über die ganze Zellenbreite gestreckt.
+Status-Badges, Logstufen, Tabellenbuttons und Qualitätslinks verwenden dieselbe kompakte Geometrie aus `_theme.html`. Die Mindesthöhe beträgt `--control-compact-height` mit 1,625 rem beziehungsweise 26 px bei normaler Browserbasis. Der Radius beträgt 6 px, der Innenabstand 2 px vertikal und 8 px horizontal. Die Kontur ist 1 px transparent. Die Schrift verwendet 13 px, Gewicht 500 und Zeilenhöhe 1,4. Die Breite folgt dem Inhalt und überschreitet den verfügbaren Raum nicht. Ein Badge wird nicht über die ganze Zellenbreite gestreckt.
 
 Information, Erfolg, Warnung und Fehler verwenden jeweils das passende Text- und Flächenpaar aus Colors. Neutrale Logstufen verwenden die neutrale Hinweisfläche und Sekundärtext. Fehler- und Warnstufen verwenden ihre semantischen Farben. Logstufen verwenden Inter und keine Monospace-Sonderschrift.
 
@@ -705,7 +739,7 @@ Badges innerhalb einer Zeile haben 6 px Abstand. Eine anschliessende Aktion ist 
 
 ### Kompakte Quellen- und Release-Links
 
-Ein Quellenlink ist ein wirklicher Link mit 6 px Radius, 1 px Kontur sowie 3 px vertikalem und 9 px horizontalem Innenabstand. Die Schrift verwendet 13 px, Gewicht 500 und Zeilenhöhe 1,4. Die Links stehen mit 6 px Abstand nebeneinander.
+Ein Quellenlink ist ein wirklicher Link mit 6 px Radius, 1 px Kontur sowie 2 px vertikalem und 8 px horizontalem Innenabstand. Seine Mindesthöhe beträgt wie bei Badges und Tabellenbuttons 1,625 rem beziehungsweise 26 px. Die Schrift verwendet 13 px, Gewicht 500 und Zeilenhöhe 1,4. Die Links stehen mit 6 px Abstand nebeneinander.
 
 Die Standarddarstellung entspricht der neutralen Bedienung. Für besuchte Links gilt die Besuchsmarkierung aus Colors. In einem dreizeiligen Eintrag bleiben die Links einzeilig und werden bei Platzmangel horizontal scrollbar. Einzelne Links schrumpfen nicht zusammen. Ein Tooltip kann den vollständigen Quelltitel ergänzen.
 
@@ -801,8 +835,12 @@ Ein Titel bleibt einzeilig. Bei Platzmangel erscheint ein Auslassungszeichen. De
   scrollbar-width: thin;
 }
 .ds-source-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
-  padding: 3px 9px;
+  min-height: var(--control-compact-height);
+  padding: 2px 8px;
   border: 1px solid var(--control-border);
   border-radius: var(--radius-control);
   background: var(--control);
@@ -842,20 +880,20 @@ Das Beispiel setzt die gemeinsame CSS-Basis und die Inter-Einbindung voraus. Der
 
 ### Tabellen und mobile Eintragskarten
 
-Desktop-Tabellen verwenden feste Spaltenanteile und verbinden die Zeilen durch feine Konturen. Die Oberfläche verwendet keine wechselnden Zebraflächen. Eine Zeile wird beim Überfahren auf `surface-hover` gesetzt. Zellen richten sich oben und links aus. Der Innenabstand beträgt 18 px vertikal und 20 px horizontal.
+Desktop-Tabellen verwenden eine feste Statusbreite und prozentuale Datenbreiten und verbinden die Zeilen durch feine Konturen. Die Oberfläche verwendet keine wechselnden Zebraflächen. Eine Zeile wird beim Überfahren auf `surface-hover` gesetzt. Zellen richten sich oben und links aus. Der Innenabstand beträgt 18 px vertikal und 20 px horizontal.
 
 | Tabelle im Quellprojekt | Titel / Quelle | Bestand / Ziel | Status | Datum / Details |
 | --- | --- | --- | --- | --- |
-| Aktuelle Einträge | 46 % | 20 % | 14 % | 20 % |
-| Historie | 46 % | 24 % | 14 % | 16 % |
+| Aktuelle Einträge und Import | Restbreite | 20 % | 16 rem | 20 % |
+| Historie | Restbreite | 24 % | 16 rem | 16 % |
 
-Die Prozentanteile sind Anwendungsdetails und keine Pflicht für andere Datenmodelle. Kopfzellen verwenden grundsätzlich 14 px und mittleres Gewicht. Eine bestehende CSS-Ausnahme ist die Datumsüberschrift mit 14 px, Gewicht 400 und Zeilenhöhe 1,6. Für neue Tabellen ist die gemeinsame Kopfrolle mit 500 und 1,4 der Ausgangspunkt.
+Die Statusbreite hält die vorhandenen Badge-Beschriftungen einzeilig. Die Spaltenaufteilung ist ein Anwendungsdetail und keine Pflicht für andere Datenmodelle. Kopfzellen verwenden grundsätzlich 14 px und mittleres Gewicht. Eine bestehende CSS-Ausnahme ist die Datumsüberschrift mit 14 px, Gewicht 400 und Zeilenhöhe 1,6. Für neue Tabellen ist die gemeinsame Kopfrolle mit 500 und 1,4 der Ausgangspunkt.
 
 Ein Datenbereich ist am Desktop 5,25 rem hoch. Gleich hohe Zeilen halten die Tabelle ruhig. Längere Inhalte bleiben innerhalb der vorhandenen Scrollbereiche erreichbar. Importziele werden auf höchstens zwei Zeilen gekürzt und zeigen letzten Ordner und Dateinamen. Der vollständige Zielpfad bleibt als Tooltip erhalten. Daten selbst werden durch die Kürzung nicht verändert.
 
-Bis 760 px wird jede Tabellenzeile zu einer eigenen Karte mit 10 px Radius und 10 px Innenabstand für die Eintragsliste. Einzelne Werte stehen neben ihrem sichtbaren Feldlabel. Das Label verwendet 13 px und Gewicht 500 in normaler Gross- und Kleinschreibung. Die Labelspalte ist 105 px breit, bis 470 px 88 px. Dazwischen liegen 10 px. Tabellenüberschriften bleiben für assistive Technik verfügbar.
+Bis 760 px wird jede Tabellenzeile zu einer eigenen Karte mit 10 px Radius und 10 px Innenabstand für die Eintragsliste. Einzelne Werte stehen neben ihrem sichtbaren Feldlabel. Das Label verwendet 13 px und Gewicht 500 in normaler Gross- und Kleinschreibung. Die Labelspalte ist 3,5 rem breit. Dazwischen liegen 14 px. Dadurch beginnen die Werte auch im Medienimport an derselben Textkante wie in den Feed-Karten. Tabellenüberschriften bleiben für assistive Technik verfügbar.
 
-Die mobilen Bestandsbereiche haben im Quellprojekt 4,75 rem Höhe, Statusbereiche 2,125 rem und Datumsbereiche 1,75 rem. Diese Masse sind auf die gezeigten Daten abgestimmt. Ein anderes Datenmodell übernimmt sie nur nach einer Prüfung mit seinen tatsächlichen Inhalten.
+Die mobilen Bestandsbereiche haben im Quellprojekt 4,75 rem Höhe, Statusbereiche eine kompakte Elementhöhe zuzüglich 8 px und Datumsbereiche 1,75 rem. Mehrere Badges und eine anschliessende Aktion bleiben auf einer horizontal scrollbar erreichbaren Zeile. Diese Masse sind auf die gezeigten Daten abgestimmt. Ein anderes Datenmodell übernimmt sie nur nach einer Prüfung mit seinen tatsächlichen Inhalten.
 
 ### Panels, Auswahlkarten und leere Ansichten
 
