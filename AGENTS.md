@@ -1,12 +1,20 @@
 # Projektregeln
 
+## Verbindliche Grundlagen
+
+Zu Beginn jeder Aufgabe diese AGENTS.md, die [ADR-Übersicht](docs/adr/index.md) und alle für die Aufgabe relevanten ADRs vollständig lesen. Diese Lektüre ist verpflichtend. Die Vorgaben bei der gesamten Bearbeitung beachten.
+
 ## Sprache und Stil
 
 Immer Schweizer Rechtschreibung verwenden. Keine Emojis, Semikolons oder Gedankenstriche im Fliesstext verwenden. Aufzählungen sparsam einsetzen. Nüchternen technischen Textstil mit gut lesbarem Fliesstext verwenden. Wörter im Fliesstext nicht fett oder kursiv hervorheben. Kommentare im Code beschreiben hauptsächlich, weshalb etwas gemacht wird.
 
+## Commit-Nachrichten
+
+Wenn der Benutzer «cona» oder «commit nachricht» schreibt, unabhängig von Gross- und Kleinschreibung immer eine kurze englische Commit-Nachricht passend zu den aktuellen Änderungen ausgeben. Bei einer laufenden Aufgabe die Nachricht nach Abschluss der Änderungen ausgeben.
+
 ## Architekturentscheidungen
 
-Vor Entwicklungsarbeiten die [ADR-Übersicht](docs/adr/index.md) und die für die Änderung relevanten ADRs lesen. Die angenommenen Entscheidungen sind verbindliche Vorgaben. Der bestehende Code ist kein Beleg dafür, dass eine abweichende Architektur erlaubt ist. Abweichungen benennen und das weitere Vorgehen vor einer Verhaltensänderung klären.
+Die angenommenen Entscheidungen sind verbindliche Vorgaben. Der bestehende Code ist kein Beleg dafür, dass eine abweichende Architektur erlaubt ist. Abweichungen benennen und das weitere Vorgehen vor einer Verhaltensänderung klären.
 
 Keine Schattendatenbank des Jellyfin-Bestands und keine Synchronisation eines solchen Bestands führen. Alle für die fachliche Zuordnung und Einsortierung von Episoden oder ganzen Serien benötigten Informationen über die Jellyfin API beziehen. Gespeicherte Jellyfin-Statuswerte dürfen keine Entscheidungsgrundlage für spätere Läufe sein.
 
