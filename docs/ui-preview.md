@@ -42,3 +42,22 @@ Die Vorschau verwendet denselben Bild-URL-Filter wie die Anwendung. Synthetische
 Der Python-Server bindet ausschliesslich an `127.0.0.1`. Er lädt keine `.env`, öffnet keine Datenbank und erzeugt keine Medienverarbeitung. Jellyfin, Feeds und Medienverzeichnisse werden nicht angesprochen. Formularaktionen liefern eine Musterrückmeldung, Release-Links führen zu einer lokalen Beispielseite. So bleibt die optische Prüfung mit denselben Daten wiederholbar.
 
 Die Vorschau ergänzt die fachlichen Tests. Sie führt keine echten Feed-Abgleiche, Imports, Zuordnungen oder Änderungen an Einträgen aus.
+
+## Rückkehr zum Tab prüfen
+
+Die wiederholbare [Browserprüfung](../tests/browser/return_refresh.mjs) benötigt Node.js ab Version 22, Firefox und die laufende lokale Vorschau. In einem zweiten Terminal wird ein isoliertes Browserprofil gestartet:
+
+```sh
+mkdir -p out/ui-return-check/firefox
+firefox --headless --no-remote --profile "$PWD/out/ui-return-check/firefox" --remote-debugging-port 9334
+```
+
+In einem dritten Terminal startet die Prüfung:
+
+```sh
+node tests/browser/return_refresh.mjs
+```
+
+Die Prüfung wechselt echte Browsertabs und simuliert den Zeitablauf sowie erfolgreiche, fehlgeschlagene, unvollständige und verzögerte Seitenantworten. Sie prüft die Aktualisierung von Feed, Medienimport, Historie und Log sowie den Erhalt von Filtern, Fokus, Textauswahl und Scrollposition. Weitere Fälle decken gleichzeitige Laufstatusabfragen, leere Ergebnisse, Wiederholungen und die mobile Darstellung ab. Bildschirmaufnahmen liegen anschliessend unter `out/ui-return-check`.
+
+Vorschauadresse, WebDriver-BiDi-Adresse und Ausgabeverzeichnis können in dieser Reihenfolge als Argumente übergeben werden. Die Standardadressen sind `http://127.0.0.1:28733` und `ws://127.0.0.1:9334/session`. Die Prüfung verwendet ausschliesslich die synthetischen Vorschaudaten. Nach der Prüfung kann der separate Firefox-Prozess mit `Ctrl+C` beendet werden.

@@ -12,7 +12,6 @@
 
     .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 0 24px; }
     .actions form { margin: 0; }
-    [hidden] { display: none !important; }
     .run-feedback p { margin: 0 0 8px; }
     .run-feedback form { margin: 0; }
     .history-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 0 24px; padding: 0; border: 0; }
@@ -130,6 +129,7 @@
     {% set busy = scan_status == 'running' or import_status == 'running' %}
     {% set navigation_page = 'index' %}
     {% include "_navigation.html" %}
+    {% include "_return_feedback.html" %}
     <span class="tab-anchor" id="overview" aria-hidden="true"></span>
     <span class="tab-anchor" id="history" aria-hidden="true"></span>
     <span class="tab-anchor" id="media-import" aria-hidden="true"></span>
@@ -142,68 +142,70 @@
           <form method="post" action="/run/import"><button type="submit" data-run-start {% if busy %}disabled{% endif %}>Dateien jetzt einsortieren</button></form>
         </div>
       {% endif %}
-      <div class="alert run-feedback" role="status" data-run-feedback="import" data-running="{{ 'true' if import_status == 'running' else 'false' }}" {% if import_status != 'running' %}hidden{% endif %}>
-        <p data-run-message>Manuelles Einsortieren läuft. Der Status wird im Hintergrund aktualisiert. Neue Ergebnisse kannst du nach dem Abschluss laden.</p>
-        <form method="get" action="/#media-import"><button type="submit">Ansicht aktualisieren</button></form>
-        <noscript>JavaScript ist deaktiviert. Lade den aktuellen Stand mit «Ansicht aktualisieren».</noscript>
-      </div>
-      {% if state.get('automatic_import_error') %}
-        <div class="alert error details" role="alert">
-          <strong>Automatischer Medienimport mit Fehlern</strong>
-          {{ state.get('automatic_import_error') }}
+      <div data-live-content="media-import">
+        <div class="alert run-feedback" role="status" data-run-feedback="import" data-running="{{ 'true' if import_status == 'running' else 'false' }}" {% if import_status != 'running' %}hidden{% endif %}>
+          <p data-run-message>Manuelles Einsortieren läuft. Der Status wird im Hintergrund aktualisiert. Neue Ergebnisse kannst du nach dem Abschluss laden.</p>
+          <form method="get" action="/#media-import"><button type="submit">Ansicht aktualisieren</button></form>
+          <noscript>JavaScript ist deaktiviert. Lade den aktuellen Stand mit «Ansicht aktualisieren».</noscript>
         </div>
-      {% endif %}
-      {% if state.get('library_refresh_pending') == '1' %}
-        <div class="alert" role="status">
-          <strong>Jellyfin-Bibliotheksscan ausstehend</strong>
-          Vor weiteren Dateiübernahmen wird der Scan erneut angefordert.
-        </div>
-      {% endif %}
-      {% if state.get('income_scan_error') %}
-        <div class="alert error" role="alert">
-          <strong>Download-Scan fehlgeschlagen</strong>
-          {{ state.get('income_scan_error') }}
-        </div>
-      {% endif %}
-      <div class="panel">
-        {% if media_imports %}
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th class="release">Quelle</th><th class="inventory">Episode</th><th class="status-col">Status</th><th class="date-col">Details</th></tr></thead>
-              <tbody>
-                {% for item in media_imports %}
-                  <tr>
-                    <td class="release" data-label="Quelle">
-                      {{ item.source_path }}
-                      {% if item.target_path %}<small class="import-target">→ {{ item.target_path }}</small>{% endif %}
-                    </td>
-                    <td class="inventory" data-label="Episode">
-                      <div>
-                      {% if item.season is not none and item.episode is not none %}S{{ "%02d" | format(item.season) }}E{{ "%02d" | format(item.episode) }}{% else %}–{% endif %}
-                      {% if item.parsed_title %}<small>{{ item.parsed_title }}</small>{% endif %}
-                      </div>
-                    </td>
-                    <td class="status-col" data-label="Status">
-                      {% if item.status == 'needs_selection' %}<span class="badge blocked">Serienzuordnung wählen</span>
-                      {% elif item.status == 'blocked' %}<span class="badge blocked">Blockiert</span>
-                      {% else %}<span class="badge warning">Wartet</span>{% endif %}
-                    </td>
-                    <td class="date-col" data-label="Details">
-                      <div class="import-details">
-                      <span>{{ item.reason or 'Wartet auf Importprüfung' }}</span>
-                      {% if media_import_enabled and item.status == 'needs_selection' %}
-                        <a class="button button-compact" href="/media-import/resolve?source={{ item.source_path | urlencode }}">Serie zuordnen</a>
-                      {% endif %}
-                      </div>
-                    </td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+        {% if state.get('automatic_import_error') %}
+          <div class="alert error details" role="alert">
+            <strong>Automatischer Medienimport mit Fehlern</strong>
+            {{ state.get('automatic_import_error') }}
           </div>
-        {% else %}
-          <div class="empty"><strong>Keine offenen Importe</strong><span>Download ist leer oder wurde noch nicht gescannt.</span></div>
         {% endif %}
+        {% if state.get('library_refresh_pending') == '1' %}
+          <div class="alert" role="status">
+            <strong>Jellyfin-Bibliotheksscan ausstehend</strong>
+            Vor weiteren Dateiübernahmen wird der Scan erneut angefordert.
+          </div>
+        {% endif %}
+        {% if state.get('income_scan_error') %}
+          <div class="alert error" role="alert">
+            <strong>Download-Scan fehlgeschlagen</strong>
+            {{ state.get('income_scan_error') }}
+          </div>
+        {% endif %}
+        <div class="panel">
+          {% if media_imports %}
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th class="release">Quelle</th><th class="inventory">Episode</th><th class="status-col">Status</th><th class="date-col">Details</th></tr></thead>
+                <tbody>
+                  {% for item in media_imports %}
+                    <tr data-row-key="{{ item.source_path }}">
+                      <td class="release" data-label="Quelle">
+                        {{ item.source_path }}
+                        {% if item.target_path %}<small class="import-target">→ {{ item.target_path }}</small>{% endif %}
+                      </td>
+                      <td class="inventory" data-label="Episode">
+                        <div>
+                        {% if item.season is not none and item.episode is not none %}S{{ "%02d" | format(item.season) }}E{{ "%02d" | format(item.episode) }}{% else %}–{% endif %}
+                        {% if item.parsed_title %}<small>{{ item.parsed_title }}</small>{% endif %}
+                        </div>
+                      </td>
+                      <td class="status-col" data-label="Status">
+                        {% if item.status == 'needs_selection' %}<span class="badge blocked">Serienzuordnung wählen</span>
+                        {% elif item.status == 'blocked' %}<span class="badge blocked">Blockiert</span>
+                        {% else %}<span class="badge warning">Wartet</span>{% endif %}
+                      </td>
+                      <td class="date-col" data-label="Details">
+                        <div class="import-details">
+                        <span>{{ item.reason or 'Wartet auf Importprüfung' }}</span>
+                        {% if media_import_enabled and item.status == 'needs_selection' %}
+                          <a class="button button-compact" href="/media-import/resolve?source={{ item.source_path | urlencode }}">Serie zuordnen</a>
+                        {% endif %}
+                        </div>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="empty"><strong>Keine offenen Importe</strong><span>Download ist leer oder wurde noch nicht gescannt.</span></div>
+          {% endif %}
+        </div>
       </div>
     </section>
 
@@ -235,7 +237,7 @@
             </thead>
             <tbody>
               {% for row in rows %}
-                <tr{% if not current_panel %} class="history-{{ row.kind }}"{% endif %}>
+                <tr data-row-key="{{ row.source_keys | join('|') if current_panel else row.source_key if row.kind == 'feed' else row.source_path }}"{% if not current_panel %} class="history-{{ row.kind }}"{% endif %}>
                   {% if not current_panel and row.kind == 'import' %}
                     <td class="release" data-label="Eintrag"><div class="release-layout">{{ series_poster(row) }}<div class="release-content"><span class="release-title" title="{{ row.source_path }}" tabindex="0">{{ row.source_path }}</span><span class="release-details">{{ type_marker('import') }}</span></div></div></td>
                     <td class="inventory" data-label="Bestand / Ziel">
@@ -331,18 +333,20 @@
       <div class="actions" aria-label="Feed-Aktionen">
         <form method="post" action="/run/feed"><button type="submit" data-run-start {% if busy %}disabled{% endif %}>Feed jetzt abgleichen</button></form>
       </div>
-      {% if state.get('last_error') %}
-        <div class="alert error" role="alert">
-          <strong>Der letzte Scan ist fehlgeschlagen.</strong>
-          {{ state.get('last_error') }} Die zuletzt gespeicherten Ergebnisse bleiben sichtbar.
+      <div data-live-content="overview">
+        {% if state.get('last_error') %}
+          <div class="alert error" role="alert">
+            <strong>Der letzte Scan ist fehlgeschlagen.</strong>
+            {{ state.get('last_error') }} Die zuletzt gespeicherten Ergebnisse bleiben sichtbar.
+          </div>
+        {% endif %}
+        <div class="alert run-feedback" role="status" data-run-feedback="feed" data-running="{{ 'true' if scan_status == 'running' else 'false' }}" {% if scan_status != 'running' %}hidden{% endif %}>
+          <p data-run-message>Feed-Abgleich läuft. Der Status wird im Hintergrund aktualisiert. Neue Ergebnisse kannst du nach dem Abschluss laden.</p>
+          <form method="get" action="/#overview"><button type="submit">Ansicht aktualisieren</button></form>
+          <noscript>JavaScript ist deaktiviert. Lade den aktuellen Stand mit «Ansicht aktualisieren».</noscript>
         </div>
-      {% endif %}
-      <div class="alert run-feedback" role="status" data-run-feedback="feed" data-running="{{ 'true' if scan_status == 'running' else 'false' }}" {% if scan_status != 'running' %}hidden{% endif %}>
-        <p data-run-message>Feed-Abgleich läuft. Der Status wird im Hintergrund aktualisiert. Neue Ergebnisse kannst du nach dem Abschluss laden.</p>
-        <form method="get" action="/#overview"><button type="submit">Ansicht aktualisieren</button></form>
-        <noscript>JavaScript ist deaktiviert. Lade den aktuellen Stand mit «Ansicht aktualisieren».</noscript>
+        <div class="panel current">{{ release_table(current, true) }}</div>
       </div>
-      <div class="panel current">{{ release_table(current, true) }}</div>
     </section>
 
     <section class="view" id="history-view" aria-labelledby="history-title">
@@ -351,18 +355,16 @@
         <p>Der Lauf ist beendet. Lade die neuen Ergebnisse mit «Ansicht aktualisieren».</p>
         <form method="get" action="/#history"><button type="submit">Ansicht aktualisieren</button></form>
       </div>
-      {% if history %}
-      <fieldset class="history-filters">
+      <fieldset class="history-filters" {% if not history %}hidden{% endif %}>
         <legend class="visually-hidden">Einträge anzeigen</legend>
         <label><input id="history-filter-feed" type="checkbox" checked> Feed</label>
         <label><input id="history-filter-import" type="checkbox" checked> Import</label>
       </fieldset>
-      {% endif %}
-      <div class="panel history-panel">{{ release_table(history) }}</div>
+      <div class="panel history-panel" data-live-content="history">{{ release_table(history) }}</div>
       <div class="panel empty history-filter-empty"><strong>Keine Art ausgewählt</strong><span>Aktiviere Feed oder Import, um Einträge anzuzeigen.</span></div>
     </section>
 
-    <footer>Erzeugt am {{ generated_at | local_datetime }}</footer>
+    <footer data-live-content="generated-at">Erzeugt am {{ generated_at | local_datetime }}</footer>
   </main>
 </body>
 </html>

@@ -69,6 +69,12 @@ Die Kopfbereiche von Feed, Medienimport und Historie zeigen keine Eintragszahlen
 
 Ein manueller Feed-Abgleich oder Medienimport lädt das Dokument nicht automatisch neu. Das von derselben Anwendung gelieferte [Skript](../src/newtvshowsng2/static/ui.js) liest während eines laufenden Vorgangs die bereits erzeugte Hauptseite in Abständen von drei Sekunden. Es aktualisiert ausschliesslich die Laufhinweise und die Verfügbarkeit der Startaktionen. Tabellen, Historienfilter, Scrollposition und Tastaturfokus bleiben bestehen.
 
+Beim Zurückkehren zu einem Tab oder Browserfenster aktualisiert das Skript die Ergebnisse, wenn die letzte vollständig geladene Ansicht mindestens eine Minute zurückliegt. Dasselbe gilt beim Wiederherstellen einer Seite aus dem Navigationscache. Feed, Medienimport und Historie übernehmen Tabellen, Meldungen und Erzeugungszeitpunkt aus der bereits erzeugten Hauptseite. Die Logansicht übernimmt die Ergebnisse für ihre aktuelle URL einschliesslich Filter und Ergebnisseite. Der Abruf startet keine Verarbeitung.
+
+Navigation, Historienfilter und Logeingaben bleiben erhalten. Die Hauptseite hält die Scrollposition möglichst am bisher sichtbaren Eintrag fest. Falls dieser entfällt, verwendet sie einen nachfolgenden Eintrag oder die bisherige Scrollposition. Ein fokussiertes Bedienelement oder markierter Text im betroffenen Ergebnisbereich verschiebt die Aktualisierung bis nach dem Verlassen beziehungsweise Aufheben der Auswahl. Während eines laufenden Logfilters hat dessen Abruf Vorrang.
+
+Gleichzeitige Rückkehrereignisse erzeugen nur einen Abruf. Hauptseite und Laufstatus teilen laufende Anfragen. Statusabfragen pausieren in unsichtbaren Tabs und werden beim Zurückkehren fortgesetzt. Die Rückkehrfunktion selbst erzeugt keine periodischen Abrufe. Bei einem Fehler bleiben die bisherigen Inhalte sichtbar. Ein Hinweis mit «Erneut versuchen» erlaubt einen neuen Abruf ohne vollständiges Neuladen.
+
 Das Diagnoselog zeigt keine zusätzliche Sortierzeile, keinen Stand und keine Angabe zum ältesten gespeicherten Eintrag im Seitenkopf. Zeitangaben der einzelnen Meldungen, Filter und die ausdrückliche Aktualisierung bleiben verfügbar.
 
 Die strukturierte Logansicht zeigt Zeitstempel, Logstufe, Meldung und Quelle jeweils einmal. Sie berücksichtigt die aktuelle Datei und vorhandene rotierte Dateien. Die vollständige aktuelle Logdatei ist über die Schaltfläche «Raw-Log öffnen» verfügbar.
