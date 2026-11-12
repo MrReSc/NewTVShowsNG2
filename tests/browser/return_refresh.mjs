@@ -276,6 +276,90 @@ try {
     await screenshot('error-mobile');
   });
 
+  await test('Auflösungsfilter zeigen vorhandene Werte einmalig neben dem Feed-Abgleich', async () => {
+    await open();
+    await run(`localStorage.removeItem('newtvshowsng2.feed.resolutions'); return true;`);
+    await open();
+    const actual = await run(`
+      const filters = document.querySelector('[data-resolution-filters]');
+      const button = document.querySelector('[action="/run/feed"] button');
+      return {
+        values: [...filters.querySelectorAll('input')].map(input => input.value),
+        checked: [...filters.querySelectorAll('input')].every(input => input.checked),
+        beside: filters.getBoundingClientRect().left > button.getBoundingClientRect().right
+          && Math.abs(filters.getBoundingClientRect().top - button.getBoundingClientRect().top) < 1
+      };
+    `);
+    assert.deepEqual(actual.values, ['720p', '1080p', '2160p']);
+    assert.equal(actual.checked, true);
+    assert.equal(actual.beside, true);
+  });
+
+  await test('Auflösungswahl filtert nur Links und bleibt nach dem Neuladen erhalten', async () => {
+    const before = await run(`return [...document.querySelectorAll('#overview-view tbody tr')].map(row => ({key: row.dataset.rowKey, form: row.querySelector('form')?.outerHTML}));`);
+    await run(`for (const input of document.querySelectorAll('[data-resolution-filters] input')) if (input.value !== '1080p') input.click(); return true;`);
+    await open();
+    const actual = await run(`return {
+      values: [...document.querySelectorAll('[data-resolution-filters] input:checked')].map(input => input.value),
+      resolutions: [...new Set([...document.querySelectorAll('#overview-view [data-resolution]:not([hidden])')].map(link => link.dataset.resolution))],
+      rows: [...document.querySelectorAll('#overview-view tbody tr')].map(row => ({key: row.dataset.rowKey, form: row.querySelector('form')?.outerHTML}))
+    };`);
+    assert.deepEqual(actual.values, ['1080p']);
+    assert.deepEqual(actual.resolutions, ['1080p']);
+    assert.deepEqual(actual.rows, before);
+    await screenshot('resolution-filter-desktop');
+    await call('browsingContext.setViewport', { context, viewport: { width: 390, height: 700 } });
+    assert.equal(await run('return document.documentElement.scrollWidth <= innerWidth;'), true);
+    await screenshot('resolution-filter-mobile');
+    await run(`document.querySelector('[data-resolution-filters] input:checked').click(); return true;`);
+    await open();
+    assert.equal(await run(`return document.querySelectorAll('#overview-view [data-resolution]:not([hidden])').length;`), 0);
+    assert.equal(await run(`return [...document.querySelectorAll('#overview-view .resolution-empty')].every(node => !node.hidden);`), true);
+  });
+
+  await test('Neue Auflösungen und unbekannte Quellen ergänzen die Filter bei Rückkehr', async () => {
+    await fixture(`
+      for (const link of page.querySelectorAll('#overview-view [data-resolution="720p"]')) link.remove();
+      const group = page.querySelector('#overview-view .variant-links');
+      for (const [resolution, rank] of [['576p', '576'], ['Quelle', '10000']]) {
+        const link = group.querySelector('a').cloneNode(true);
+        link.dataset.resolution = resolution;
+        link.dataset.resolutionRank = rank;
+        link.textContent = resolution;
+        group.append(link);
+      }
+    `);
+    await returnToTab();
+    await waitFor(`document.querySelector('[data-resolution-filters] input[value="576p"]')`);
+    assert.deepEqual(await run(`return [...document.querySelectorAll('[data-resolution-filters] input')].map(input => [input.value, input.checked]);`), [
+      ['576p', true], ['1080p', false], ['2160p', false], ['Quelle', true],
+    ]);
+    assert.equal(await run(`return document.querySelector('[data-resolution-filters] input[value="Quelle"]').parentElement.textContent;`), 'Ohne Auflösung');
+    await run(`document.querySelector('[data-resolution-filters] input[value="Quelle"]').click(); document.activeElement.blur(); return true;`);
+    assert.equal(await run(`return document.querySelector('#overview-view [data-resolution="Quelle"]').hidden;`), true);
+    await fixture(`page.querySelector('footer').textContent = 'Auflösungen erneut geladen'`);
+    await returnToTab();
+    await waitFor(`document.querySelector('footer').textContent === 'Auflösungen erneut geladen'`);
+    assert.equal(await run(`return document.querySelector('#overview-view [data-resolution="Quelle"]').hidden;`), true);
+    await open();
+    assert.equal(await run(`return document.querySelector('[data-resolution-filters] input[value="720p"]').checked;`), false);
+  });
+
+  await test('Leerer Feed blendet die Auflösungsfilter aus und ungültiger Speicher blockiert sie nicht', async () => {
+    await open('/?state=empty#overview');
+    assert.equal(await run(`return document.querySelector('[data-resolution-filters]').hidden;`), true);
+    await run(`localStorage.setItem('newtvshowsng2.feed.resolutions', '{ungültig'); return true;`);
+    await open();
+    assert.equal(await run(`return [...document.querySelectorAll('[data-resolution-filters] input')].every(input => input.checked);`), true);
+    await run(`
+      Storage.prototype.setItem = () => { throw new DOMException('Browserspeicher gesperrt', 'SecurityError'); };
+      document.querySelector('[data-resolution-filters] input[value="1080p"]').click();
+      return true;
+    `);
+    assert.equal(await run(`return [...document.querySelectorAll('#overview-view [data-resolution="1080p"]')].every(link => link.hidden);`), true);
+    await run(`localStorage.removeItem('newtvshowsng2.feed.resolutions'); return true;`);
+  });
+
   console.log(`${passed} Browserprüfungen erfolgreich`);
 } finally {
   await call('browsingContext.close', { context });

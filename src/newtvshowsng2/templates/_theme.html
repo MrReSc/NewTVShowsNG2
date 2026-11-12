@@ -85,27 +85,27 @@
   .episode-code { color: var(--text-secondary); font-size: var(--type-label); font-weight: var(--weight-regular); line-height: var(--leading-compact); font-variant-numeric: lining-nums tabular-nums; white-space: nowrap; }
   input, select { border-radius: var(--radius-control); caret-color: var(--control-focus); accent-color: var(--control-focus); }
   input::placeholder { color: var(--muted); opacity: 1; }
-  :where(a, button, input, select, summary, .history-filters label) {
+  :where(a, button, input, select, summary, :is(.history-filters, .resolution-filters) label) {
     --interaction-fill: transparent;
     --interaction-border: transparent;
     --interaction-text: var(--control-text);
     --interaction-hover-fill: var(--control-hover);
   }
-  :is(button, .button, .return, .variant-links a, input:not([type="hidden"]), select, .history-filters label) {
+  :is(button, .button, .return, .variant-links a, input:not([type="hidden"]), select, :is(.history-filters, .resolution-filters) label) {
     --interaction-fill: var(--control);
     --interaction-border: var(--control-border);
   }
-  :is(button, .button, .return, .variant-links a, .nav a, input:not([type="hidden"]), select, summary, .history-filters label) {
+  :is(button, .button, .return, .variant-links a, .nav a, input:not([type="hidden"]), select, summary, :is(.history-filters, .resolution-filters) label) {
     border: 1px solid var(--interaction-border);
     background-color: var(--interaction-fill);
     color: var(--interaction-text);
   }
-  :where(a, button, input:not([type="hidden"]), select, summary, .history-filters label):hover:not(:disabled) {
+  :where(a, button, input:not([type="hidden"]), select, summary, :is(.history-filters, .resolution-filters) label):hover:not(:disabled) {
     border-color: var(--control-border-hover);
     background-color: var(--interaction-hover-fill);
     color: var(--control-text-hover);
   }
-  :where(a, button, input:not([type="hidden"]), select, summary, .history-filters label):active:not(:disabled) {
+  :where(a, button, input:not([type="hidden"]), select, summary, :is(.history-filters, .resolution-filters) label):active:not(:disabled) {
     border-color: var(--control-border-pressed);
     background-color: var(--control-pressed);
     color: var(--control-text-hover);
@@ -125,7 +125,7 @@
   input[type="checkbox"]:disabled { cursor: not-allowed; }
   details[open] > summary,
   input[type="checkbox"]:checked,
-  .history-filters label:has(input:checked) {
+  :is(.history-filters, .resolution-filters) label:has(input:checked) {
     --interaction-fill: var(--control-selected);
     --interaction-border: var(--control-border-selected);
     --interaction-text: var(--control-text-hover);
@@ -154,7 +154,7 @@
     --interaction-hover-fill: var(--text);
     color: var(--interaction-text);
   }
-  button, .button, .return, .history-filters label { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 14px; border-radius: var(--radius-control); font-family: var(--font-interface); font-size: var(--type-label); font-weight: var(--weight-medium); line-height: var(--leading-compact); text-decoration: none; cursor: pointer; }
+  button, .button, .return, :is(.history-filters, .resolution-filters) label { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 14px; border-radius: var(--radius-control); font-family: var(--font-interface); font-size: var(--type-label); font-weight: var(--weight-medium); line-height: var(--leading-compact); text-decoration: none; cursor: pointer; }
   .badge, .level, .variant-links a, .button-compact, table :is(button, .button) { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-compact-height); padding: 2px 8px; border-width: 1px; border-style: solid; border-radius: var(--radius-control); font-family: var(--font-interface); font-size: var(--type-caption); font-weight: var(--weight-medium); line-height: var(--leading-compact); text-decoration: none; white-space: nowrap; }
   .badge, .level { border-color: transparent; }
   .button-compact { white-space: nowrap; }

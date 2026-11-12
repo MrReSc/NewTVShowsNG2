@@ -228,9 +228,67 @@
     });
   }
 
+  function initialiseResolutionFilters(filters) {
+    const overview = document.getElementById('overview-view');
+    const storageKey = 'newtvshowsng2.feed.resolutions';
+    const selection = new Map();
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey));
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+        for (const [resolution, checked] of Object.entries(saved)) {
+          if (typeof checked === 'boolean') selection.set(resolution, checked);
+        }
+      }
+    } catch {
+      // Gesperrter Browserspeicher oder ungültige Werte dürfen die Anzeige nicht blockieren.
+    }
+
+    function apply() {
+      for (const group of overview.querySelectorAll('.variant-links')) {
+        const links = [...group.querySelectorAll('[data-resolution]')];
+        for (const link of links) link.hidden = selection.get(link.dataset.resolution) === false;
+        group.querySelector('.resolution-empty').hidden = links.some(link => !link.hidden);
+      }
+    }
+
+    function update() {
+      const available = new Map([...overview.querySelectorAll('[data-resolution]')]
+        .map(link => [link.dataset.resolution, Number(link.dataset.resolutionRank)]));
+      for (const label of filters.querySelectorAll('label')) label.remove();
+      for (const [resolution] of [...available].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))) {
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = resolution;
+        input.checked = selection.get(resolution) !== false;
+        label.append(input, resolution === 'Quelle' ? 'Ohne Auflösung' : resolution);
+        filters.append(label);
+      }
+      filters.hidden = !available.size;
+      apply();
+    }
+
+    filters.addEventListener('change', event => {
+      const input = event.target;
+      if (!input.matches('input[type="checkbox"]')) return;
+      selection.set(input.value, input.checked);
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(selection)));
+      } catch {
+        // Der Filter bleibt auch ohne dauerhaften Browserspeicher bedienbar.
+      }
+      apply();
+    });
+    update();
+    return update;
+  }
+
   function initialiseIndex() {
     const regions = [...document.querySelectorAll('[data-live-content]')];
     if (!regions.length) return;
+    const resolutionFilters = document.querySelector('[data-resolution-filters]');
+    const updateResolutions = initialiseResolutionFilters(resolutionFilters);
+    const protectedRegions = [...regions, resolutionFilters];
     const watched = new Set([...document.querySelectorAll('[data-run-feedback][data-running="true"]')]
       .map(node => node.dataset.runFeedback));
     let request = null;
@@ -315,17 +373,18 @@
     }
 
     refreshOnReturn(async () => {
-      if (!canReplace(regions)) return false;
+      if (!canReplace(protectedRegions)) return false;
       const page = await loadPage();
       const filters = document.querySelector('.history-filters');
       const incomingFilters = page.querySelector('.history-filters');
-      if (!canReplace(incomingFilters.hidden ? [...regions, filters] : regions)) return false;
+      if (!canReplace(incomingFilters.hidden ? [...protectedRegions, filters] : protectedRegions)) return false;
       preservePosition(() => {
         for (const region of regions) {
           const incoming = page.querySelector(`[data-live-content="${region.dataset.liveContent}"]`);
           region.replaceChildren(...incoming.childNodes);
         }
         filters.hidden = incomingFilters.hidden;
+        updateResolutions();
         applyStatus(page, true);
       });
       return true;

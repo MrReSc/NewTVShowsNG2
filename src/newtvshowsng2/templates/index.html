@@ -14,9 +14,10 @@
     .actions form { margin: 0; }
     .run-feedback p { margin: 0 0 8px; }
     .run-feedback form { margin: 0; }
-    .history-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 0 24px; padding: 0; border: 0; }
-    .history-filters label { gap: 8px; }
-    .history-filters input { width: 17px; height: 17px; margin: 0; }
+    .history-filters, .resolution-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; margin: 0 0 24px; padding: 0; border: 0; }
+    .resolution-filters { margin: 0; }
+    :is(.history-filters, .resolution-filters) label { gap: 8px; }
+    :is(.history-filters, .resolution-filters) input { width: 17px; height: 17px; margin: 0; }
     .history-filter-empty { display: none; }
     #history-view:has(#history-filter-feed:not(:checked)) .history-feed,
     #history-view:has(#history-filter-import:not(:checked)) .history-import { display: none; }
@@ -70,6 +71,7 @@
     .release-table .badge-row { min-height: 0; overflow: auto; scrollbar-width: thin; }
     .release-table .complete-action { flex: 0 0 auto; margin-top: 0; }
     .variant-links { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
+    .resolution-empty { color: var(--muted); font-size: var(--type-caption); line-height: var(--leading-compact); }
     .type-marker { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: var(--type-caption); font-weight: var(--weight-regular); line-height: var(--leading-compact); }
     .type-marker svg { width: 14px; height: 14px; flex: 0 0 auto; }
     .inventory { width: 20%; white-space: normal; }
@@ -262,8 +264,9 @@
                         <span class="episode-code">S{{ "%02d" | format(row.season) }}{% if row.episode is not none %}E{{ "%02d" | format(row.episode) }}{% endif %}</span>
                         <span class="variant-links">
                           {% for variant in row.variants %}
-                            <a href="{{ variant.link }}" title="{{ variant.title }}" target="_blank" rel="noopener noreferrer">{{ variant.label }}</a>
+                            <a href="{{ variant.link }}" title="{{ variant.title }}" data-resolution="{{ variant.base_label }}" data-resolution-rank="{{ variant.quality_rank }}" target="_blank" rel="noopener noreferrer">{{ variant.label }}</a>
                           {% endfor %}
+                          <span class="resolution-empty" hidden>Keine gewählte Auflösung</span>
                         </span>
                         </span>
                       {% else %}
@@ -335,6 +338,9 @@
       <h1 class="visually-hidden" id="current-title">Aktuell fehlend</h1>
       <div class="actions" aria-label="Feed-Aktionen">
         <form method="post" action="/run/feed"><button type="submit" data-run-start {% if busy %}disabled{% endif %}>Feed jetzt abgleichen</button></form>
+        <fieldset class="resolution-filters" data-resolution-filters hidden>
+          <legend class="visually-hidden">Release-Links nach Auflösung filtern</legend>
+        </fieldset>
       </div>
       <div data-live-content="overview">
         {% if state.get('last_error') %}

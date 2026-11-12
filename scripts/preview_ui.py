@@ -85,7 +85,8 @@ class PreviewData:
             link="/preview/release?" + urlencode({"title": name}),
             variants=[
                 dict(link="/preview/release?" + urlencode({"title": name, "quality": quality}),
-                     title=f"{name} German {quality}", label=quality)
+                     title=f"{name} German {quality}", label=quality,
+                     base_label=quality.split()[0], quality_rank=int(quality.split('p')[0]))
                 for quality in variant_labels
             ],
         )
