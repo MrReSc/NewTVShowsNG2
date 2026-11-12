@@ -297,7 +297,7 @@ Die visuelle Identität entsteht aus Inter, drei Texthelligkeiten, vier Schriftg
 
 ### Geltung und Übertragbarkeit
 
-Diese Spezifikation beschreibt das in NewTVShowsNG2 umgesetzte Design mit Stand 8. November 2026. Ihr allgemeiner Teil lässt sich auf andere datenorientierte Webanwendungen übertragen. Produktnamen, Datenquellen, fachliche Statusbedeutungen und konkrete Seitenabläufe werden im Zielprojekt separat festgelegt. Die hier gezeigten Komponenten benötigen kein bestimmtes Frontend-Framework.
+Diese Spezifikation beschreibt das in NewTVShowsNG2 umgesetzte Design mit Stand 12. November 2026. Ihr allgemeiner Teil lässt sich auf andere datenorientierte Webanwendungen übertragen. Produktnamen, Datenquellen, fachliche Statusbedeutungen und konkrete Seitenabläufe werden im Zielprojekt separat festgelegt. Die hier gezeigten Komponenten benötigen kein bestimmtes Frontend-Framework.
 
 Die YAML-Tokens am Dateianfang definieren die Werte. Die folgenden Abschnitte erklären ihre Anwendung. Die Abschnittstitel folgen dem [DESIGN.md-Format](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md). Die Sprache der fachlichen Beschriftungen kann im Zielprojekt angepasst werden.
 
@@ -633,7 +633,7 @@ Eine Aktionsgruppe ist von der nachfolgenden Tabelle oder Filterfläche 24 px en
 
 Die Schriftrollen behalten ihre Grössen. Platz wird durch Anordnung, Umbruch und kleinere Aussenabstände gewonnen. Flex- und Grid-Kinder mit langen Inhalten erhalten `min-width: 0`. Einspaltige mobile Grids verwenden `minmax(0, 1fr)`, damit lange Titel keine Karten verbreitern.
 
-Der dreizeilige Eintrag behält seine Ausrichtung zum Bild auch in schmalen Fenstern. Qualitätslinks bleiben in einer Zeile und sind bei Bedarf horizontal scrollbar. Lange Titel werden gekürzt und bleiben vollständig zugänglich. Andere Inhalte wie Pfade und Meldungen dürfen umbrechen.
+Der Bildeintrag behält seine obere Ausrichtung zum Bild auch in schmalen Fenstern. Qualitätslinks umbrechen bei Platzmangel in weitere Zeilen mit 6 px Abstand. Der Textbereich und die betroffene Tabellenzeile beziehungsweise Karte wachsen mit. Die Postergrösse bleibt erhalten. Lange Titel werden gekürzt und bleiben vollständig zugänglich. Andere Inhalte wie Pfade und Meldungen dürfen umbrechen.
 
 ## Elevation & Depth
 
@@ -741,7 +741,7 @@ Badges innerhalb einer Zeile haben 6 px Abstand. Eine anschliessende Aktion ist 
 
 Ein Quellenlink ist ein wirklicher Link mit 6 px Radius, 1 px Kontur sowie 2 px vertikalem und 8 px horizontalem Innenabstand. Seine Mindesthöhe beträgt wie bei Badges und Tabellenbuttons 1,625 rem beziehungsweise 26 px. Die Schrift verwendet 13 px, Gewicht 500 und Zeilenhöhe 1,4. Die Links stehen mit 6 px Abstand nebeneinander.
 
-Die Standarddarstellung entspricht der neutralen Bedienung. Für besuchte Links gilt die Besuchsmarkierung aus Colors. In einem dreizeiligen Eintrag bleiben die Links einzeilig und werden bei Platzmangel horizontal scrollbar. Einzelne Links schrumpfen nicht zusammen. Ein Tooltip kann den vollständigen Quelltitel ergänzen.
+Die Standarddarstellung entspricht der neutralen Bedienung. Für besuchte Links gilt die Besuchsmarkierung aus Colors. Die Linkgruppe umbricht bei Platzmangel in weitere Zeilen und verwendet keinen eigenen Scrollbereich. Einzelne Links behalten ihre natürliche Breite, solange diese in die Zelle passt. Ist bereits ein einzelner Link breiter als die verfügbare Fläche, wird seine Beschriftung innerhalb der Zellenbreite umgebrochen. Zwischen den Linkzeilen liegen wie zwischen den Links 6 px. Ein Tooltip kann den vollständigen Quelltitel ergänzen.
 
 Bei mehreren Quellen derselben Qualität folgt die Quellenkennung mit einem Leerzeichen, beispielsweise `1080p WAYNE`. Ein zusätzlicher Mittelpunkt wird nicht eingefügt. Der Zieltext bleibt ausreichend aussagekräftig, um mehrere Links voneinander zu unterscheiden.
 
@@ -753,18 +753,18 @@ Dieser Baustein ist die wiederkehrende Kombination aus Bild, Titel, ergänzendem
 | --- | --- |
 | Bild | 3,5 rem breit, 5,25 rem hoch, Radius 6 px, `object-fit: cover` |
 | Abstand zwischen Bild und Text | 14 px |
-| Textbereich | 5,25 rem hoch, flexibel breit, `min-width: 0` |
+| Textbereich | Regulär 5,25 rem hoch, im Feed mindestens 5,25 rem und mit dem Inhalt wachsend, flexibel breit, `min-width: 0` |
 | Erste Zeile | Eintragstitel, sichtbare Versalhöhe oben bündig mit dem Bild |
 | Zweite Zeile | Ergänzender Code in Inter, 14 px / 400, normale Null, gleich breite Ziffern |
-| Dritte Zeile | Aktionslinks beziehungsweise Eintragsart, unten bündig mit dem Bild |
-| Zwischenraum | Der freie Platz wird mit `justify-content: space-between` verteilt |
+| Dritter Bereich | Aktionslinks beziehungsweise Eintragsart, bei einer Linkzeile unten bündig mit dem Bild |
+| Zwischenraum | Der freie Platz wird mit `justify-content: space-between` verteilt, im Feed mit mindestens 10 px Abstand zwischen Titel, Code und Linkgruppe |
 
-Die obere Ausrichtung berücksichtigt den Innenraum der Schriftzeile. Ein aus Versalhöhe und Zeilenhöhe berechneter Aussenabstand mit `calc((1cap - 1lh) / 2)` richtet die sichtbare Schrift an der Bildkante aus. Der Aktionsbereich endet am unteren Bildrand. Es werden keine festen Pixelkorrekturen pro Wort verwendet. In mobilen Eintragskarten beginnen auch die Werte für Bestand, Status und Datum an der Textkante neben dem Bild. Bildbreite und Bildabstand bestimmen dafür dieselben beiden Spalten wie im Bildeintrag.
+Die obere Ausrichtung berücksichtigt den Innenraum der Schriftzeile. Ein aus Versalhöhe und Zeilenhöhe berechneter Aussenabstand mit `calc((1cap - 1lh) / 2)` richtet die sichtbare Schrift an der Bildkante aus. Bei einer Linkzeile endet der Aktionsbereich am unteren Bildrand. Weitere Linkzeilen erweitern den Textbereich nach unten. Bild und übrige Tabellenspalten bleiben oben ausgerichtet. Es werden keine festen Pixelkorrekturen pro Wort verwendet. In mobilen Eintragskarten beginnen auch die Werte für Bestand, Status und Datum an der Textkante neben dem Bild. Bildbreite und Bildabstand bestimmen dafür dieselben beiden Spalten wie im Bildeintrag.
 
 Ein Titel bleibt einzeilig. Bei Platzmangel erscheint ein Auslassungszeichen. Der vollständige Titel steht als Tooltip bereit und bleibt als vollständiger Text im Dokument. Der Titelbereich oder sein Link ist per Tastatur erreichbar und lässt sich bei Fokus horizontal scrollen. Der Tooltip ist damit eine Ergänzung zur zugänglichen Darstellung. Auf Geräten ohne Hover muss der volle Titel weiterhin über den fokussierbaren Text oder das zugehörige Linkziel erreichbar bleiben.
 
 ```html
-<article class="ds-item">
+<article class="ds-item ds-item--wrap">
   <img class="ds-item-image" src="/images/example.webp"
        width="56" height="84" alt="">
   <div class="ds-item-content">
@@ -800,6 +800,12 @@ Ein Titel bleibt einzeilig. Bei Platzmangel erscheint ein Auslassungszeichen. De
   min-width: 0;
   height: 5.25rem;
 }
+.ds-item--wrap,
+.ds-item--wrap .ds-item-content {
+  height: auto;
+  min-height: 5.25rem;
+}
+.ds-item--wrap .ds-item-content { row-gap: 10px; }
 .ds-item-title {
   flex: 0 0 auto;
   margin-block-start: calc((1cap - 1lh) / 2);
@@ -827,18 +833,19 @@ Ein Titel bleibt einzeilig. Bei Platzmangel erscheint ein Auslassungszeichen. De
 .ds-item-links {
   display: flex;
   flex: 0 0 auto;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
   max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: thin;
 }
 .ds-source-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
   min-height: var(--control-compact-height);
   padding: 2px 8px;
   border: 1px solid var(--control-border);
@@ -889,7 +896,7 @@ Desktop-Tabellen verwenden eine feste Statusbreite und prozentuale Datenbreiten 
 
 Die Statusbreite hält die vorhandenen Badge-Beschriftungen einzeilig. Die Spaltenaufteilung ist ein Anwendungsdetail und keine Pflicht für andere Datenmodelle. Kopfzellen verwenden grundsätzlich 14 px und mittleres Gewicht. Eine bestehende CSS-Ausnahme ist die Datumsüberschrift mit 14 px, Gewicht 400 und Zeilenhöhe 1,6. Für neue Tabellen ist die gemeinsame Kopfrolle mit 500 und 1,4 der Ausgangspunkt.
 
-Ein Datenbereich ist am Desktop 5,25 rem hoch. Gleich hohe Zeilen halten die Tabelle ruhig. Längere Inhalte bleiben innerhalb der vorhandenen Scrollbereiche erreichbar. Importziele werden auf höchstens zwei Zeilen gekürzt und zeigen letzten Ordner und Dateinamen. Der vollständige Zielpfad bleibt als Tooltip erhalten. Daten selbst werden durch die Kürzung nicht verändert.
+Ein Datenbereich ist am Desktop regulär 5,25 rem hoch. Feed-Einträge verwenden diese Höhe als Mindesthöhe und wachsen bei mehreren Linkzeilen mit dem Inhalt. Nur die betroffene Tabellenzeile wird höher. Die Postergrösse und die obere Ausrichtung der übrigen Spalten bleiben erhalten. Längere Bestands- und Statusangaben bleiben innerhalb der vorhandenen Scrollbereiche erreichbar. Importziele werden auf höchstens zwei Zeilen gekürzt und zeigen letzten Ordner und Dateinamen. Der vollständige Zielpfad bleibt als Tooltip erhalten. Daten selbst werden durch die Kürzung nicht verändert.
 
 Bis 760 px wird jede Tabellenzeile zu einer eigenen Karte mit 10 px Radius und 10 px Innenabstand für die Eintragsliste. Einzelne Werte stehen neben ihrem sichtbaren Feldlabel. Das Label verwendet 13 px und Gewicht 500 in normaler Gross- und Kleinschreibung. Die Labelspalte ist 3,5 rem breit. Dazwischen liegen 14 px. Dadurch beginnen die Werte auch im Medienimport an derselben Textkante wie in den Feed-Karten. Tabellenüberschriften bleiben für assistive Technik verfügbar.
 
@@ -964,7 +971,7 @@ Die dokumentierten Kompaktgrössen sind auf die bestätigte Desktop-Bedienung ab
 | Schriftrollen | Reguläre sichtbare Texte verwenden nur 13, 14, 16 oder 20 px bei normaler Browserbasis |
 | Gewichte | Reguläre Oberfläche verwendet 400, 500 oder 600 |
 | Datenvergleich | Bestand, Datum und Uhrzeit haben dieselbe Grösse, Gewichtung, Zeilenhöhe und Farbe |
-| Dreizeiliger Eintrag | Titelbox beginnt am oberen Bildrand, Aktionsbereich endet am unteren Bildrand |
+| Bildeintrag | Titelbox beginnt am oberen Bildrand, bei einer Linkzeile endet der Aktionsbereich am unteren Bildrand, weitere Linkzeilen bleiben ohne Scrollbereich sichtbar |
 | Radien | Buttons, Badges, Quellenlinks und Bilder haben denselben Radius |
 | Lange Inhalte | Vollständige Werte bleiben über Text, Fokus, Scrollbereich oder ergänzendes Ziel zugänglich |
 | Tastatur | Reihenfolge, Fokusmarkierung und alle Aktionen sind bedienbar |

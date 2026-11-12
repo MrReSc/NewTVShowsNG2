@@ -27,6 +27,10 @@ POSTERS_BY_ID = {SERIES_IDS[title]: filename for title, filename in SERIES_POSTE
 SELECTION_TITLE = "Die Karten von Quellhafen"
 SELECTION_SOURCE = "Die.Karten.von.Quellhafen.S01E01.German.1080p.mkv"
 LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+MULTIPLE_RELEASE_VARIANTS = (
+    "720p WvF 1", "720p WvF 2", "1080p WAYNE 1", "1080p WAYNE 2",
+    "2160p WvF", "2160p WAYNE",
+)
 
 
 class PreviewData:
@@ -34,9 +38,10 @@ class PreviewData:
         self.now = datetime.now(UTC)
         self.renderer = Renderer(None, ROOT / "out/ui-preview/index.html", "Europe/Zurich")
         self.current = [
-            self.release("Falkenquai 17", is_new=True),
+            self.release("Falkenquai 17", is_new=True, variant_labels=MULTIPLE_RELEASE_VARIANTS),
             self.release("Die Staubgrenze", season=4, jellyfin_episode_count=4,
-                         jellyfin_expected_episode_count=10, needed_episodes=list(range(5, 11))),
+                         jellyfin_expected_episode_count=10, needed_episodes=list(range(5, 11)),
+                         variant_labels=MULTIPLE_RELEASE_VARIANTS),
             self.release("Archiv der stillen Uhren"),
             self.release(SELECTION_TITLE, match_warning=True),
             self.release("Die Vermessung der verlorenen Nächte am Äusseren Falkenquai", episode=7),
@@ -68,7 +73,7 @@ class PreviewData:
                  reason="Mehrere passende Serien gefunden. Wähle den gewünschten Treffer."),
         ]
 
-    def release(self, name: str, **changes) -> dict:
+    def release(self, name: str, *, variant_labels: tuple[str, ...] = ("720p", "1080p", "2160p"), **changes) -> dict:
         key = name.lower().replace(" ", "-")
         row = dict(
             kind="feed", matched_series_name=name, display_title=name, title=name,
@@ -81,7 +86,7 @@ class PreviewData:
             variants=[
                 dict(link="/preview/release?" + urlencode({"title": name, "quality": quality}),
                      title=f"{name} German {quality}", label=quality)
-                for quality in ("720p", "1080p", "2160p")
+                for quality in variant_labels
             ],
         )
         row.update(changes)

@@ -60,9 +60,12 @@
     .release-layout { display: flex; align-items: flex-start; gap: var(--release-gap); height: var(--release-row-height); }
     .series-poster { flex: 0 0 var(--release-poster-width); width: var(--release-poster-width); height: var(--release-row-height); object-fit: cover; border-radius: var(--radius-control); background: #252525; }
     .release-content { display: flex; flex-direction: column; justify-content: space-between; flex: 1; min-width: 0; height: var(--release-row-height); }
+    #overview-view .release-layout,
+    #overview-view .release-content { height: auto; min-height: var(--release-row-height); }
+    #overview-view .release-content { row-gap: 10px; }
     .release-details { display: contents; font-weight: var(--weight-regular); }
-    .release-table .variant-links { flex: 0 0 auto; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
-    .release-table .variant-links a { flex: 0 0 auto; }
+    .release-table .variant-links { flex: 0 0 auto; }
+    .release-table .variant-links a { flex: 0 0 auto; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
     .release-table .status-col .cell-content { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
     .release-table .badge-row { min-height: 0; overflow: auto; scrollbar-width: thin; }
     .release-table .complete-action { flex: 0 0 auto; margin-top: 0; }
